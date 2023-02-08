@@ -1,0 +1,44 @@
+name: Deploy image
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
+  repository_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+      - '[vt][0-9].[0-9]+.[0-9x]+*'
+    tags:
+      - "*"
+env:
+  DHUBU: ${{secrets.DHUBU}}
+  DHUBP: ${{secrets.DHUBP}}
+  BUILD_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-db-image:
+    runs-on: build-runner
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: "false"
+
+      - name: build docker image
+        run: |
+          python3 ./.github/workflows/deploy.py build_docker_image \
+          --github_sha=${GITHUB_SHA}
+
+      - name: publish image
+        run: |
+          python3 ./.github/workflows/deploy.py publish_image \
+          --github_sha=${GITHUB_SHA}
+
+      - name: Finalize image
+        run: |
+          python3 ./.github/workflows/deploy.py finalize_image \
+          --head_ref_branch=${{ github.head_ref }} \
+          --github_ref=${GITHUB_REF} \
+          --github_sha=${GITHUB_SHA}
