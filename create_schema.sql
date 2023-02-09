@@ -1,15 +1,13 @@
 CREATE SCHEMA partman;
 CREATE EXTENSION pg_partman SCHEMA partman;
 
-CREATE SCHEMA neon_history;
-
 /**
  * This plugin implementation for PostgreSQL requires the following tables
  */
 -- The table storing accounts
 
 
-CREATE TABLE neon_history.account (
+CREATE TABLE public.account (
     pubkey BYTEA PRIMARY KEY,
     owner BYTEA,
     lamports BIGINT NOT NULL,
@@ -22,19 +20,19 @@ CREATE TABLE neon_history.account (
     txn_signature BYTEA
 );
 
-CREATE INDEX account_owner ON neon_history.account (owner);
+CREATE INDEX account_owner ON public.account (owner);
 
-CREATE INDEX account_slot ON neon_history.account (slot);
+CREATE INDEX account_slot ON public.account (slot);
 
 -- The table storing slot information
-CREATE TABLE neon_history.slot (
+CREATE TABLE public.slot (
     slot BIGINT PRIMARY KEY,
     parent BIGINT,
     status VARCHAR(16) NOT NULL,
     updated_on TIMESTAMP
 );
 
-INSERT INTO neon_history.slot(slot, parent, status)
+INSERT INTO public.slot(slot, parent, status)
 VALUES (0, NULL, 'rooted');
 
 -- Types for Transactions
@@ -163,7 +161,7 @@ CREATE TYPE "LoadedMessageV0" AS (
 );
 
 -- The table storing transactions
-CREATE TABLE neon_history.transaction (
+CREATE TABLE public.transaction (
     slot BIGINT NOT NULL,
     signature BYTEA NOT NULL,
     is_vote BOOL NOT NULL,
@@ -178,10 +176,10 @@ CREATE TABLE neon_history.transaction (
     CONSTRAINT transaction_pk PRIMARY KEY (slot, signature)
 );
 
-CREATE INDEX transaction_signature ON neon_history.transaction (signature);
+CREATE INDEX transaction_signature ON public.transaction (signature);
 
 -- The table storing block metadata
-CREATE TABLE neon_history.block (
+CREATE TABLE public.block (
     slot BIGINT PRIMARY KEY,
     blockhash VARCHAR(44),
     rewards "Reward"[],
@@ -191,30 +189,30 @@ CREATE TABLE neon_history.block (
 );
 
 -- The table storing spl token owner to account indexes
-CREATE TABLE neon_history.spl_token_owner_index (
+CREATE TABLE public.spl_token_owner_index (
     owner_key BYTEA NOT NULL,
     account_key BYTEA NOT NULL,
     slot BIGINT NOT NULL
 );
 
-CREATE INDEX spl_token_owner_index_owner_key ON neon_history.spl_token_owner_index (owner_key);
-CREATE UNIQUE INDEX spl_token_owner_index_owner_pair ON neon_history.spl_token_owner_index (owner_key, account_key);
+CREATE INDEX spl_token_owner_index_owner_key ON public.spl_token_owner_index (owner_key);
+CREATE UNIQUE INDEX spl_token_owner_index_owner_pair ON public.spl_token_owner_index (owner_key, account_key);
 
 -- The table storing spl mint to account indexes
-CREATE TABLE neon_history.spl_token_mint_index (
+CREATE TABLE public.spl_token_mint_index (
     mint_key BYTEA NOT NULL,
     account_key BYTEA NOT NULL,
     slot BIGINT NOT NULL
 );
 
-CREATE INDEX spl_token_mint_index_mint_key ON neon_history.spl_token_mint_index (mint_key);
-CREATE UNIQUE INDEX spl_token_mint_index_mint_pair ON neon_history.spl_token_mint_index (mint_key, account_key);
+CREATE INDEX spl_token_mint_index_mint_key ON public.spl_token_mint_index (mint_key);
+CREATE UNIQUE INDEX spl_token_mint_index_mint_pair ON public.spl_token_mint_index (mint_key, account_key);
 
 -- Table storing older state of all accounts
 -- History looks like:
 -- >>>>>>>>>>>>>>>>>>>>>>>>>TIME>>>>>>>>>>>>>>>>>>>>>>>>
 -- older_state >>> account_audit >>> account
-CREATE TABLE neon_history.older_state (
+CREATE TABLE public.older_state (
     pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,
@@ -227,11 +225,11 @@ CREATE TABLE neon_history.older_state (
     txn_signature BYTEA
 );
 
-CREATE INDEX older_state_pubkey ON  neon_history.older_state (pubkey);
+CREATE INDEX older_state_pubkey ON  public.older_state (pubkey);
 
 -- Historical data for accounts
 -- This is partitioned table
-CREATE TABLE neon_history.account_audit (
+CREATE TABLE public.account_audit (
     pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,
@@ -244,16 +242,16 @@ CREATE TABLE neon_history.account_audit (
     txn_signature BYTEA
 ) PARTITION BY RANGE (slot);
 
-CREATE INDEX account_audit_pubkey_slot_wv ON  neon_history.account_audit (pubkey, slot, write_version);
-CREATE INDEX account_audit_txn_signature ON neon_history.account_audit (txn_signature);
-CREATE INDEX account_audit_slot ON neon_history.account_audit (slot);
+CREATE INDEX account_audit_pubkey_slot_wv ON  public.account_audit (pubkey, slot, write_version);
+CREATE INDEX account_audit_txn_signature ON public.account_audit (txn_signature);
+CREATE INDEX account_audit_slot ON public.account_audit (slot);
 
 -- Single partition should contain 216000 slots (~1 day)
-SELECT partman.create_parent('neon_history.account_audit', 'slot', 'native', '216000');
+SELECT partman.create_parent('public.account_audit', 'slot', 'native', '216000');
 
 CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
     BEGIN
-		INSERT INTO neon_history.account_audit (pubkey, owner, lamports, slot, executable,
+		INSERT INTO public.account_audit (pubkey, owner, lamports, slot, executable,
 		                           rent_epoch, data, write_version, updated_on, txn_signature)
             VALUES (NEW.pubkey, NEW.owner, NEW.lamports, NEW.slot,
                     NEW.executable, NEW.rent_epoch, NEW.data,
@@ -263,5 +261,5 @@ CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
 
 $audit_account_update$ LANGUAGE plpgsql;
 
-CREATE TRIGGER account_update_trigger AFTER INSERT OR UPDATE OR DELETE ON neon_history.account
+CREATE TRIGGER account_update_trigger AFTER INSERT OR UPDATE OR DELETE ON public.account
     FOR EACH ROW EXECUTE PROCEDURE audit_account_update();
