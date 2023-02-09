@@ -211,8 +211,8 @@ CREATE UNIQUE INDEX spl_token_mint_index_mint_pair ON public.spl_token_mint_inde
 -- Table storing older state of all accounts
 -- History looks like:
 -- >>>>>>>>>>>>>>>>>>>>>>>>>TIME>>>>>>>>>>>>>>>>>>>>>>>>
--- older_state >>> account_audit >>> account
-CREATE TABLE public.older_state (
+-- older_account >>> account_audit >>> account
+CREATE TABLE public.older_account (
     pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,
@@ -225,7 +225,7 @@ CREATE TABLE public.older_state (
     txn_signature BYTEA
 );
 
-CREATE INDEX older_state_pubkey ON  public.older_state (pubkey);
+CREATE INDEX older_account_pubkey ON  public.older_account (pubkey);
 
 -- Historical data for accounts
 -- This is partitioned table

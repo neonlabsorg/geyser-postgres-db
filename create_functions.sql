@@ -472,16 +472,16 @@ END;
 $get_recent_blockhashes$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE PROCEDURE update_older_state(
+CREATE OR REPLACE PROCEDURE update_older_account(
     until_slot BIGINT
 )
 
-AS $update_older_state$
+AS $update_older_account$
 
 BEGIN
     -- add recent states of all accounts from account_audit
-    -- before slot until_slot into older_state table
-    INSERT INTO public.older_state
+    -- before slot until_slot into older_account table
+    INSERT INTO public.older_account
     SELECT
         acc1.pubkey,
         acc1.owner,
@@ -510,4 +510,4 @@ BEGIN
     WHERE
         acc1.slot < until_slot;
 END;
-$update_older_state$ LANGUAGE plpgsql;
+$update_older_account$ LANGUAGE plpgsql;

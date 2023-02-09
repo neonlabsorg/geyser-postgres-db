@@ -27,7 +27,7 @@ ERR_MSG_TPL = {
 
 DOCKER_USER = os.environ.get("DHUBU")
 DOCKER_PASSWORD = os.environ.get("DHUBP")
-IMAGE_NAME = 'neonlabsorg/accountsdb'
+IMAGE_NAME = 'neonlabsorg/tracerdb'
 POSTGRES_VERSION = '14-alpine'
 
 VERSION_BRANCH_TEMPLATE = r"[vt]{1}\d{1,2}\.\d{1,2}\.x.*"
