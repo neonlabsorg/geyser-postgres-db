@@ -117,7 +117,7 @@ $find_txn_slot_on_longest_branch$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 -- Returns pre-accounts data for given transaction on a given slot
-CREATE OR REPLACE FUNCTION get_pre_accounts_one_slot(
+CREATE OR REPLACE FUNCTION get_latest_accounts_one_slot(
     current_slot BIGINT,
     max_write_version BIGINT,
     transaction_accounts BYTEA[]
@@ -135,7 +135,7 @@ RETURNS TABLE (
     signature BYTEA
 )
 
-AS $get_pre_accounts_one_slot$
+AS $get_latest_accounts_one_slot$
 
 BEGIN
     RETURN QUERY
@@ -158,11 +158,11 @@ BEGIN
             acc.pubkey,
             acc.write_version DESC;
 END;
-$get_pre_accounts_one_slot$ LANGUAGE plpgsql;
+$get_latest_accounts_one_slot$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION get_pre_accounts_branch(
-    start_slot BIGINT,
+CREATE OR REPLACE FUNCTION get_latest_branch_accounts(
+    max_slot BIGINT,
     max_write_version BIGINT,
     transaction_accounts BYTEA[]
 )
@@ -179,19 +179,20 @@ RETURNS TABLE (
     signature BYTEA
 )
 
-AS $get_pre_accounts_branch$
+AS $get_latest_branch_accounts$
 
 DECLARE
     branch_slots BIGINT[];
 
-BEGIN   
+BEGIN 
+    -- Find all slots on the given branch starting from max_slot down to first rooted slot
     WITH RECURSIVE parents AS (
         SELECT
             first.slot,
             first.parent,
             first.status
         FROM public.slot AS first
-        WHERE first.slot = start_slot and first.status <> 'rooted'
+        WHERE first.slot = max_slot and first.status <> 'rooted'
         UNION
             SELECT
                 next.slot,
@@ -205,6 +206,8 @@ BEGIN
     INTO branch_slots
     FROM parents AS prnts;
    
+    -- Find latest states of all accounts from transaction_accounts
+    -- on the found branch of non-rooted slots
     RETURN QUERY
         SELECT DISTINCT ON (slot_results.pubkey)
             slot_results.lamports,
@@ -218,7 +221,7 @@ BEGIN
             slot_results.signature
         FROM
             unnest(branch_slots) AS current_slot,
-            get_pre_accounts_one_slot(
+            get_latest_accounts_one_slot(
                 current_slot, 
                 max_write_version, 
                 transaction_accounts
@@ -228,15 +231,15 @@ BEGIN
             slot_results.slot DESC,
             slot_results.write_version DESC;
 END;
-$get_pre_accounts_branch$ LANGUAGE plpgsql;
+$get_latest_branch_accounts$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 -- Returns latest versions of accounts with pubkeys included in @transaction_accounts
--- with update events in slots not much than @start_slot
--- and write versions not much than @max_write_version
+-- with update events in slots not much than max_slot
+-- and write versions not much than max_write_version
 -- Search is performed over account_audit table (latest written history)
-CREATE OR REPLACE FUNCTION get_pre_audit_accounts(
-    start_slot BIGINT,
+CREATE OR REPLACE FUNCTION get_latest_accounts_audit(
+    max_slot BIGINT,
     max_write_version BIGINT,
     transaction_accounts BYTEA[]
 )
@@ -253,7 +256,7 @@ RETURNS TABLE (
     signature BYTEA
 )
 
-AS $get_pre_audit_accounts$
+AS $get_latest_accounts_audit$
 
 BEGIN
     RETURN QUERY
@@ -270,22 +273,22 @@ BEGIN
         FROM public.account_audit AS acc
         WHERE
             acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
-            AND acc.slot <= start_slot
+            AND acc.slot <= max_slot
             AND acc.write_version < max_write_version
         ORDER BY
             acc.pubkey DESC,
             acc.slot DESC,
             acc.write_version DESC;
 END;
-$get_pre_audit_accounts$ LANGUAGE plpgsql;
+$get_latest_accounts_audit$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 -- Returns latest versions of accounts with pubkeys included in @transaction_accounts
--- with update events in slots not much than @start_slot
+-- with update events in slots not much than max_slot
 -- and write versions not much than @max_write_version
 -- Search is performed over older_account table (oldest versions)
-CREATE OR REPLACE FUNCTION get_pre_older_accounts(
-    start_slot BIGINT,
+CREATE OR REPLACE FUNCTION get_latest_accounts_older(
+    max_slot BIGINT,
     max_write_version BIGINT,
     transaction_accounts BYTEA[]
 )
@@ -302,7 +305,7 @@ RETURNS TABLE (
     signature BYTEA
 )
 
-AS $get_pre_older_accounts$
+AS $get_latest_accounts_older$
 
 BEGIN
     RETURN QUERY
@@ -319,14 +322,14 @@ BEGIN
         FROM public.older_account AS old
         WHERE
             old.pubkey IN (SELECT * FROM unnest(transaction_accounts))
-            AND old.slot <= start_slot
+            AND old.slot <= max_slot
             AND old.write_version < max_write_version;
 END;
-$get_pre_older_accounts$ LANGUAGE plpgsql;
+$get_latest_accounts_older$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION get_pre_accounts_root(
-    start_slot BIGINT,
+CREATE OR REPLACE FUNCTION get_latest_rooted_accounts(
+    max_slot BIGINT,
     max_write_version BIGINT,
     transaction_accounts BYTEA[]
 )
@@ -343,7 +346,7 @@ RETURNS TABLE (
     signature BYTEA
 )
 
-AS $get_pre_accounts_root$
+AS $get_latest_rooted_accounts$
 
 BEGIN
     RETURN QUERY
@@ -351,9 +354,9 @@ BEGIN
         -- plus olderst available state in older_accounts - collect from both
         -- and take only latest for each account from transaction_accounts
         WITH results AS (
-            SELECT * FROM get_pre_audit_accounts(start_slot, max_write_version, transaction_accounts)
+            SELECT * FROM get_latest_accounts_audit(max_slot, max_write_version, transaction_accounts)
             UNION
-            SELECT * FROM get_pre_older_accounts(start_slot, max_write_version, transaction_accounts)
+            SELECT * FROM get_latest_accounts_older(max_slot, max_write_version, transaction_accounts)
         )
         SELECT DISTINCT ON (res.pubkey) * FROM results AS res 
         ORDER BY
@@ -361,7 +364,7 @@ BEGIN
             res.slot DESC,
             res.write_version DESC;
 END;
-$get_pre_accounts_root$ LANGUAGE plpgsql;
+$get_latest_rooted_accounts$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION get_pre_accounts(
@@ -432,7 +435,7 @@ BEGIN
                     -- Start searching recent states of accounts in this branch
                     -- down to first rooted slot 
                     -- (this search algorithm iterates over parent slots and is slow).
-                    SELECT * FROM get_pre_accounts_branch(
+                    SELECT * FROM get_latest_branch_accounts(
                         current_slot,
                         max_write_version,
                         transaction_accounts
@@ -440,7 +443,7 @@ BEGIN
                     UNION
                     -- Then apply fast search algorithm over rooted slots 
                     -- to obtain the rest of pre-accounts  
-                    SELECT * FROM get_pre_accounts_root(
+                    SELECT * FROM get_latest_rooted_accounts(
                         first_rooted_slot,
                         max_write_version,
                         transaction_accounts
@@ -465,7 +468,7 @@ BEGIN
     ELSE
         -- Transaction found on the rooted slot.
         RETURN QUERY
-            SELECT * FROM get_pre_accounts_root(
+            SELECT * FROM get_latest_rooted_accounts(
                 current_slot,
                 max_write_version,
                 transaction_accounts
@@ -564,14 +567,14 @@ $get_account_at_slot$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE update_older_account(
-    until_slot BIGINT
+    max_slot BIGINT
 )
 
 AS $update_older_account$
 
 BEGIN
     -- add recent states of all accounts from account_audit
-    -- before slot until_slot into older_account table
+    -- before slot max_slot into older_account table
     INSERT INTO public.older_account
     SELECT
         acc1.pubkey,
@@ -591,7 +594,7 @@ BEGIN
             MAX(acc2.slot) AS slot,
             MAX(acc2.write_version) AS write_version
         FROM public.account_audit AS acc2
-        WHERE acc2.slot < until_slot
+        WHERE acc2.slot < max_slot
         GROUP BY acc2.pubkey
     ) latest_versions
     ON
@@ -599,14 +602,14 @@ BEGIN
         AND latest_versions.slot = acc1.slot
         AND latest_versions.write_version = acc1.write_version
     WHERE
-        acc1.slot < until_slot;
+        acc1.slot < max_slot;
 END;
 $update_older_account$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION get_recent_update_slot(
-    for_pubkey BYTEA,
-    until_slot BIGINT
+    in_pubkey BYTEA,
+    max_slot BIGINT
 )
 
 RETURNS TABLE (
@@ -621,13 +624,13 @@ BEGIN
             SELECT acc.slot, acc.write_version 
             FROM public.account_audit AS acc
             WHERE 
-                acc.pubkey = for_pubkey 
-                AND acc.slot <= until_slot 
+                acc.pubkey = in_pubkey 
+                AND acc.slot <= max_slot 
             UNION
             SELECT old_acc.slot, old_acc.write_version
             FROM public.older_account AS old_acc
             WHERE
-                old_acc.pubkey = for_pubkey
+                old_acc.pubkey = in_pubkey
         )
         SELECT res.slot
         FROM results AS res
