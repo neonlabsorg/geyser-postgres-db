@@ -29,7 +29,6 @@ DROP TYPE "InnerInstructions" CASCADE;
 DROP TYPE "CompiledInstruction" CASCADE;
 
 DROP FUNCTION update_older_account;
-DROP FUNCTION get_recent_blockhashes;
 DROP FUNCTION get_account_at_slot;
 DROP FUNCTION get_pre_accounts;
 DROP FUNCTION get_pre_accounts_root;
