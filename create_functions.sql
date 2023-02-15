@@ -563,50 +563,6 @@ END;
 $get_account_at_slot$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION get_recent_blockhashes(start_slot BIGINT, num_hashes INT)
-
-RETURNS TABLE (
-	slot BIGINT,
-    blockhash VARCHAR(44)
-)
-
-AS $get_recent_blockhashes$
-
-DECLARE
-    branch_slots BIGINT[];
-
-BEGIN
-    WITH RECURSIVE parents(slot, parent, status, depth) AS (
-        SELECT
-            first.slot,
-            first.parent,
-            first.status,
-            1
-        FROM public.slot AS first
-        WHERE first.slot = start_slot
-        UNION
-            SELECT
-                next.slot,
-                next.parent,
-                next.status,
-                depth + 1
-            FROM public.slot AS next
-            INNER JOIN parents p ON p.parent = next.slot
-            WHERE depth < num_hashes
-    )
-    SELECT array_agg(prnts.slot)
-    INTO branch_slots
-    FROM parents AS prnts;
-
-    RETURN QUERY
-        SELECT b.slot, b.blockhash
-        FROM public.block AS b
-        WHERE b.slot = ANY(branch_slots);
-END;
-$get_recent_blockhashes$ LANGUAGE plpgsql;
-
------------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE PROCEDURE update_older_account(
     until_slot BIGINT
 )
