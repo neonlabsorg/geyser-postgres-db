@@ -213,7 +213,7 @@ CREATE UNIQUE INDEX spl_token_mint_index_mint_pair ON public.spl_token_mint_inde
 -- >>>>>>>>>>>>>>>>>>>>>>>>>TIME>>>>>>>>>>>>>>>>>>>>>>>>
 -- older_account >>> account_audit >>> account
 CREATE TABLE public.older_account (
-    pubkey BYTEA,
+    pubkey BYTEA PRIMARY KEY,
     owner BYTEA,
     lamports BIGINT NOT NULL,
     slot BIGINT NOT NULL,
@@ -224,8 +224,6 @@ CREATE TABLE public.older_account (
     updated_on TIMESTAMP NOT NULL,
     txn_signature BYTEA
 );
-
-CREATE INDEX older_account_pubkey ON  public.older_account (pubkey);
 
 -- Historical data for accounts
 -- This is partitioned table
