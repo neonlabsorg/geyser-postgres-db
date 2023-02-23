@@ -233,6 +233,7 @@ BEGIN
 END;
 $get_latest_branch_accounts$ LANGUAGE plpgsql;
 
+
 -----------------------------------------------------------------------------------------------------------------------
 -- Returns latest versions of accounts with pubkeys included in @transaction_accounts
 -- with update events in slots not much than max_slot
