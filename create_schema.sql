@@ -1,6 +1,3 @@
-CREATE SCHEMA partman;
-CREATE EXTENSION pg_partman SCHEMA partman;
-
 /**
  * This plugin implementation for PostgreSQL requires the following tables
  */
@@ -243,9 +240,6 @@ CREATE TABLE public.account_audit (
 CREATE INDEX account_audit_pubkey_slot_wv ON  public.account_audit (pubkey, slot, write_version);
 CREATE INDEX account_audit_txn_signature ON public.account_audit (txn_signature);
 CREATE INDEX account_audit_slot ON public.account_audit (slot);
-
--- Single partition should contain 216000 slots (~1 day)
-SELECT partman.create_parent('public.account_audit', 'slot', 'native', '216000');
 
 CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
     BEGIN

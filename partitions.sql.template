@@ -1,0 +1,22 @@
+CREATE SCHEMA partman;
+CREATE EXTENSION pg_partman SCHEMA partman;
+CREATE EXTENSION pg_cron;
+
+-- Single partition should contain ${ACCOUNT_AUDIT_PART_SLOT_COUNT} slots
+SELECT partman.create_parent(
+    'public.account_audit',         --p_parent_table
+    'slot',                         --p_control
+    'native',                       --p_type
+    '${ACCOUNT_AUDIT_PART_SLOT_COUNT}',  --p_interval
+    NULL,                           --p_constraint_cols
+    4,                              --p_premake
+    'off',                          --p_automatic_maintenance
+    '${ACCOUNT_AUDIT_START_SLOT}'   --p_start_partition
+);
+
+UPDATE partman.part_config
+SET 
+    retention = '${ACCOUNT_AUDIT_RETENTION_SLOTS}', 
+    retention_keep_table = FALSE, 
+    jobmon = FALSE 
+WHERE parent_table = 'public.account_audit';

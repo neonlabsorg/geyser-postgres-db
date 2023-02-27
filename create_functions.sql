@@ -603,7 +603,17 @@ BEGIN
         AND latest_versions.slot = acc1.slot
         AND latest_versions.write_version = acc1.write_version
     WHERE
-        acc1.slot < max_slot;
+        acc1.slot < max_slot
+    ON CONFLICT (pubkey) DO UPDATE SET 
+		slot=excluded.slot, 
+		owner=excluded.owner, 
+		lamports=excluded.lamports, 
+		executable=excluded.executable, 
+		rent_epoch=excluded.rent_epoch,
+        data=excluded.data, 
+		write_version=excluded.write_version, 
+		updated_on=excluded.updated_on, 
+		txn_signature=excluded.txn_signature;
 END;
 $update_older_account$ LANGUAGE plpgsql;
 
@@ -639,3 +649,31 @@ BEGIN
         LIMIT 1;
 END;
 $get_recent_update_slot$ LANGUAGE plpgsql;
+
+-----------------------------------------------------------------------------------------------------------------------
+CREATE OR REPLACE PROCEDURE account_audit_maintenance()
+
+AS $account_audit_maintenance$
+
+DECLARE
+    retention_slots BIGINT;
+    retention_until_slot BIGINT;
+
+BEGIN
+    SELECT MAX(retention)
+    INTO retention_slots
+    FROM partman.part_config
+    WHERE parent_table = 'public.account_audit';
+
+    SELECT MAX(slot) - retention_slots 
+    INTO retention_until_slot
+    FROM public.account_audit;
+
+    CALL update_older_account(retention_until_slot);
+    PERFORM FROM partman.run_maintenance(
+        'public.account_audit',
+        NULL,
+        FALSE
+    );
+END;
+$account_audit_maintenance$ LANGUAGE plpgsql;
