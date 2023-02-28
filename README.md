@@ -2,7 +2,6 @@
 
 ## Contents
 
-- Postgres confirugation file (postgres.conf)
 - DB schema - create_schema.sql, create_functions.sql, partitions.sql.template, drop_schema.sql
 - Deployment scipt - deploy.sh
 - CI dockerfile - Dockerfile
