@@ -2,7 +2,9 @@
 
 set -e
 
-PGPASSWORD=solana-pass
+if [ -z "$PGPASSWORD" ]; then
+   PGPASSWORD=solana-pass
+fi
 
 psql \
   --dbname=solana \
