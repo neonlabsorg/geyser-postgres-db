@@ -20,3 +20,5 @@ SET
     retention_keep_table = FALSE, 
     jobmon = FALSE 
 WHERE parent_table = 'public.account_audit';
+
+SELECT cron.schedule('account_audit_maintenance', '${ACCOUNT_AUDIT_MAINTENANCE_SCHEDULE}', 'CALL public.account_audit_maintenance()');
