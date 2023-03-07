@@ -34,5 +34,4 @@ DROP FUNCTION get_pre_accounts;
 DROP FUNCTION get_pre_accounts_root;
 DROP FUNCTION get_pre_accounts_branch;
 DROP FUNCTION get_pre_accounts_one_slot;
-DROP FUNCTION find_txn_slot_on_longest_branch;
 DROP FUNCTION find_slot_on_longest_branch;

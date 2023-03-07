@@ -47,74 +47,6 @@ BEGIN
 END;
 $find_slot_on_longest_branch$ LANGUAGE plpgsql;
 
-
------------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION find_txn_slot_on_longest_branch(in_txn_signature BYTEA)
-RETURNS BIGINT
-AS $find_txn_slot_on_longest_branch$
-DECLARE
-    transaction_slots BIGINT[];
-    current_slot BIGINT := NULL;
-    current_slot_status VARCHAR := NULL;
-    num_in_txn_slots INT := 0;
-BEGIN
-    -- find all occurencies of transaction in slots
-    SELECT array_agg(txn.slot)
-    INTO transaction_slots
-    FROM public.transaction AS txn
-    WHERE position(in_txn_signature in txn.signature) > 0;
-
-    -- try to find slot that was rooted with given transaction
-    SELECT txn_slot INTO current_slot
-    FROM unnest(transaction_slots) AS txn_slot
-         INNER JOIN public.slot AS s
-                    ON txn_slot = s.slot
-    WHERE s.status = 'rooted'
-    LIMIT 1;
-
-    IF current_slot IS NOT NULL THEN
-        RETURN current_slot;
-    END IF;
-
-    -- start from topmost slot
-    SELECT s.slot
-    INTO current_slot
-    FROM public.slot AS s
-    ORDER BY s.slot DESC LIMIT 1;
-
-    LOOP
-        -- get status of current slot
-        SELECT s.status
-        INTO current_slot_status
-        FROM public.slot AS s
-        WHERE s.slot = current_slot;
-
-        -- already on rooted slot - stop iteration
-        IF current_slot_status = 'rooted' THEN
-            RETURN NULL;
-        END IF;
-
-        -- does current slot contain transaction ?
-        SELECT COUNT(*)
-        INTO num_in_txn_slots
-        FROM unnest(transaction_slots) AS slot
-        WHERE slot = current_slot;
-
-        -- if yes - it means we found slot with txn
-        -- on the longest branch - return it
-        IF num_in_txn_slots <> 0 THEN
-            RETURN current_slot;
-        END IF;
-
-        -- If no - go further into the past - select parent slot
-        SELECT s.parent
-        INTO current_slot
-        FROM public.slot AS s
-        WHERE s.slot = current_slot;
-    END LOOP;
-END;
-$find_txn_slot_on_longest_branch$ LANGUAGE plpgsql;
-
 -----------------------------------------------------------------------------------------------------------------------
 -- Returns pre-accounts data for given transaction on a given slot
 CREATE OR REPLACE FUNCTION get_latest_accounts_one_slot(
@@ -151,11 +83,12 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.slot = current_slot
+            acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
+            AND acc.slot = current_slot
             AND acc.write_version < max_write_version
-            AND acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
         ORDER BY
             acc.pubkey,
+            acc.slot DESC,
             acc.write_version DESC;
 END;
 $get_latest_accounts_one_slot$ LANGUAGE plpgsql;
@@ -277,7 +210,7 @@ BEGIN
             AND acc.slot <= max_slot
             AND acc.write_version < max_write_version
         ORDER BY
-            acc.pubkey DESC,
+            acc.pubkey,
             acc.slot DESC,
             acc.write_version DESC;
 END;
@@ -361,7 +294,7 @@ BEGIN
         )
         SELECT DISTINCT ON (res.pubkey) * FROM results AS res 
         ORDER BY
-            res.pubkey DESC,
+            res.pubkey,
             res.slot DESC,
             res.write_version DESC;
 END;
@@ -405,14 +338,6 @@ BEGIN
     FROM public.transaction AS txn
     WHERE position(in_txn_signature in txn.signature) > 0;
   
-    -- Query first rooted slot
-    SELECT sl.slot
-    INTO first_rooted_slot
-    FROM public.slot AS sl
-    WHERE sl.status = 'rooted'
-    ORDER BY sl.slot DESC
-    LIMIT 1;
-  
     -- try to find slot that was rooted with given transaction
     SELECT txn_slot INTO current_slot
     FROM unnest(transaction_slots) AS txn_slot
@@ -431,6 +356,15 @@ BEGIN
             RETURN;
         ELSE
             -- Transaction found on the longest branch. 
+
+            -- Query first rooted slot
+            SELECT sl.slot
+            INTO first_rooted_slot
+            FROM public.slot AS sl
+            WHERE sl.status = 'rooted'
+            ORDER BY sl.slot DESC
+            LIMIT 1;
+
             RETURN QUERY
                 WITH results AS (
                     -- Start searching recent states of accounts in this branch
@@ -512,10 +446,11 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.slot <= in_slot
-            AND acc.pubkey = in_pubkey
+            acc.pubkey = in_pubkey
+            AND acc.slot <= in_slot
         ORDER BY 
-            acc.pubkey DESC, 
+            acc.pubkey,
+            acc.slot DESC,
             acc.write_version DESC 
         LIMIT 1;
 END;
