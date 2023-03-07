@@ -11,6 +11,7 @@ DROP TABLE transaction;
 DROP TABLE block;
 DROP TABLE spl_token_owner_index;
 DROP TABLE spl_token_mint_index;
+DROP TABLE older_account;
 
 DROP TYPE "TransactionError" CASCADE;
 DROP TYPE "TransactionErrorCode" CASCADE;
@@ -26,3 +27,11 @@ DROP TYPE "Reward" CASCADE;
 DROP TYPE "TransactionTokenBalance" CASCADE;
 DROP TYPE "InnerInstructions" CASCADE;
 DROP TYPE "CompiledInstruction" CASCADE;
+
+DROP FUNCTION update_older_account;
+DROP FUNCTION get_account_at_slot;
+DROP FUNCTION get_pre_accounts;
+DROP FUNCTION get_pre_accounts_root;
+DROP FUNCTION get_pre_accounts_branch;
+DROP FUNCTION get_pre_accounts_one_slot;
+DROP FUNCTION find_slot_on_longest_branch;

@@ -27,7 +27,7 @@ ERR_MSG_TPL = {
 
 DOCKER_USER = os.environ.get("DHUBU")
 DOCKER_PASSWORD = os.environ.get("DHUBP")
-IMAGE_NAME = 'neonlabsorg/accountsdb'
+IMAGE_NAME = 'neonlabsorg/tracerdb'
 POSTGRES_VERSION = '14-alpine'
 
 VERSION_BRANCH_TEMPLATE = r"[vt]{1}\d{1,2}\.\d{1,2}\.x.*"
@@ -70,7 +70,7 @@ def finalize_image(head_ref_branch, github_ref, github_sha):
     if re.match(VERSION_BRANCH_TEMPLATE, branch) is None:
         if 'refs/tags/' in branch:
             tag = branch.replace("refs/tags/", "")
-        elif branch == 'master':
+        elif branch == 'main':
             tag = 'stable'
         elif branch == 'develop':
             tag = 'latest'
