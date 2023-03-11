@@ -612,3 +612,48 @@ BEGIN
     );
 END;
 $account_audit_maintenance$ LANGUAGE plpgsql;
+
+-----------------------------------------------------------------------------------------------------------------------
+
+CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
+    BEGIN
+        -- Find accounts related to new transaction and move them
+        -- into account_audit table with write_version set to transaction index
+		WITH txn_accounts AS (
+            DELETE
+            FROM public.account AS acc
+            WHERE
+                acc.txn_signature = NEW.signature, acc.slot = NEW.slot 
+            RETURNS
+                acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch, 
+                acc.data, NEW.index, acc.updated_on, acc.txn_signature
+        )
+        INSERT INTO public.account_audit (
+            pubkey, owner, lamports, slot, executable, rent_epoch, 
+            data, write_version, updated_on, txn_signature
+        )
+        SELECT * FROM txn_accounts;
+
+        -- Find accounts with zero txn_signature and
+        -- move them into account_audit table with write_version replaced by 0
+        WITH system_accounts AS (
+            DELETE
+            FROM public.account AS acc
+            WHERE acc.txn_signature IS NULL
+            RETURNS
+                acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch,
+                acc.data, 0, acc.updated_on, acc.txn_signature
+        )
+        INSERT INTO public.account_audit (
+            pubkey, owner, lamports, slot, executable, rent_epoch, 
+            data, write_version, updated_on, txn_signature
+        )
+        SELECT * FROM system_accounts;
+
+        RETURN NEW;
+    END;
+
+$audit_account_update$ LANGUAGE plpgsql;
+
+CREATE TRIGGER transaction_update_trigger AFTER INSERT OR UPDATE OR DELETE ON public.transaction
+    FOR EACH ROW EXECUTE PROCEDURE audit_account_update();

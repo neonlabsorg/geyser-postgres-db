@@ -5,7 +5,7 @@
 
 
 CREATE TABLE public.account (
-    pubkey BYTEA PRIMARY KEY,
+    pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,
     slot BIGINT NOT NULL,
@@ -17,9 +17,7 @@ CREATE TABLE public.account (
     txn_signature BYTEA
 );
 
-CREATE INDEX account_owner ON public.account (owner);
-
-CREATE INDEX account_slot ON public.account (slot);
+CREATE INDEX account_txn_signature_slot ON public.account(txn_signature, slot);
 
 -- The table storing slot information
 CREATE TABLE public.slot (
@@ -240,18 +238,3 @@ CREATE TABLE public.account_audit (
 CREATE INDEX account_audit_pubkey_slot_wv ON  public.account_audit (pubkey, slot, write_version);
 CREATE INDEX account_audit_txn_signature ON public.account_audit (txn_signature);
 CREATE INDEX account_audit_slot ON public.account_audit (slot);
-
-CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
-    BEGIN
-		INSERT INTO public.account_audit (pubkey, owner, lamports, slot, executable,
-		                           rent_epoch, data, write_version, updated_on, txn_signature)
-            VALUES (NEW.pubkey, NEW.owner, NEW.lamports, NEW.slot,
-                    NEW.executable, NEW.rent_epoch, NEW.data,
-                    NEW.write_version, NEW.updated_on, NEW.txn_signature);
-        RETURN NEW;
-    END;
-
-$audit_account_update$ LANGUAGE plpgsql;
-
-CREATE TRIGGER account_update_trigger AFTER INSERT OR UPDATE OR DELETE ON public.account
-    FOR EACH ROW EXECUTE PROCEDURE audit_account_update();
