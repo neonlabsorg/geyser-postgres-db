@@ -512,7 +512,7 @@ BEGIN
     -- add recent states of all accounts from account_audit
     -- before slot max_slot into older_account table
     INSERT INTO public.older_account AS older
-    SELECT
+    SELECT DISTINCT ON acc1.pubkey
         acc1.pubkey,
         acc1.owner,
         acc1.lamports,
