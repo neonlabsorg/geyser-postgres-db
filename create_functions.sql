@@ -511,7 +511,7 @@ AS $update_older_account$
 BEGIN
     -- add recent states of all accounts from account_audit
     -- before slot max_slot into older_account table
-    INSERT INTO public.older_account
+    INSERT INTO public.older_account AS older
     SELECT
         acc1.pubkey,
         acc1.owner,
@@ -548,7 +548,10 @@ BEGIN
         data=excluded.data, 
 		write_version=excluded.write_version, 
 		updated_on=excluded.updated_on, 
-		txn_signature=excluded.txn_signature;
+		txn_signature=excluded.txn_signature
+        WHERE 
+            older.slot < excluded.slot 
+            OR (older.slot = excluded.slot AND older.write_version < excluded.write_version);
 END;
 $update_older_account$ LANGUAGE plpgsql;
 
