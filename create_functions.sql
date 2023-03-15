@@ -618,7 +618,7 @@ $account_audit_maintenance$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
-CREATE FUNCTION order_accounts() RETURNS trigger AS $order_accounts$
+CREATE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
         CREATE TABLE IF NOT EXISTS public.items_to_move (
             pubkey BYTEA,
@@ -632,7 +632,7 @@ CREATE FUNCTION order_accounts() RETURNS trigger AS $order_accounts$
             updated_on TIMESTAMP NOT NULL,
             txn_signature BYTEA
         );
-        
+
         -- match transactions and accounts by transaction signature and slot
         INSERT INTO public.items_to_move AS mv(
             pubkey,
@@ -698,11 +698,6 @@ CREATE FUNCTION order_accounts() RETURNS trigger AS $order_accounts$
             data, write_version, updated_on, txn_signature
         )
         SELECT * FROM system_accounts;
-
-        RETURN NEW;
     END;
 
 $order_accounts$ LANGUAGE plpgsql;
-
-CREATE TRIGGER transaction_update_trigger AFTER INSERT OR UPDATE OR DELETE ON public.transaction
-    FOR EACH ROW EXECUTE PROCEDURE order_accounts();
