@@ -618,24 +618,70 @@ $account_audit_maintenance$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
-CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
+CREATE FUNCTION order_accounts() RETURNS trigger AS $order_accounts$
     BEGIN
-        -- Find accounts related to new transaction and move them
-        -- into account_audit table with write_version set to transaction index
+        CREATE TABLE IF NOT EXISTS public.items_to_move (
+            pubkey BYTEA,
+            owner BYTEA,
+            lamports BIGINT NOT NULL,
+            slot BIGINT NOT NULL,
+            executable BOOL NOT NULL,
+            rent_epoch BIGINT NOT NULL,
+            data BYTEA,
+            write_version BIGINT NOT NULL,
+            updated_on TIMESTAMP NOT NULL,
+            txn_signature BYTEA
+        );
+
+        -- match transactions and accounts by transaction signature and slot
+        INSERT INTO public.items_to_move AS mv(
+            pubkey,
+            owner,
+            lamports,
+            slot,
+            executable,
+            rent_epoch,
+            data,
+            write_version,
+            updated_on,
+            txn_signature
+        )
+        SELECT
+            acc.pubkey,
+            acc.owner,
+            acc.lamports,
+            acc.slot,
+            acc.executable,
+            acc.rent_epoch,
+            acc.data,
+            txn.write_version,
+            acc.updated_on,
+            acc.txn_signature 
+        FROM public.account AS acc
+        INNER JOIN public.transaction AS txn
+        ON
+            acc.txn_signature = txn.signature AND acc.slot = txn.slot;
+
+
+        -- Move found accounts from account to account_audit
 		WITH txn_accounts AS (
             DELETE
             FROM public.account AS acc
+            USING public.items_to_move AS mv
             WHERE
-                acc.txn_signature = NEW.signature AND acc.slot = NEW.slot 
+                acc.txn_signature = mv.txn_signature AND acc.slot = mv.slot 
             RETURNING
                 acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch, 
-                acc.data, NEW.write_version, acc.updated_on, acc.txn_signature
+                acc.data, mv.write_version, acc.updated_on, acc.txn_signature
         )
         INSERT INTO public.account_audit (
             pubkey, owner, lamports, slot, executable, rent_epoch, 
             data, write_version, updated_on, txn_signature
         )
         SELECT * FROM txn_accounts;
+
+        -- clean temporary table for next operation
+        TRUNCATE TABLE public.items_to_move;
 
         -- Find accounts with zero txn_signature and
         -- move them into account_audit table with write_version replaced by 0
@@ -656,7 +702,7 @@ CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
         RETURN NEW;
     END;
 
-$audit_account_update$ LANGUAGE plpgsql;
+$order_accounts$ LANGUAGE plpgsql;
 
 CREATE TRIGGER transaction_update_trigger AFTER INSERT OR UPDATE OR DELETE ON public.transaction
-    FOR EACH ROW EXECUTE PROCEDURE audit_account_update();
+    FOR EACH ROW EXECUTE PROCEDURE order_accounts();
