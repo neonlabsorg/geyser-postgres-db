@@ -623,7 +623,7 @@ CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
             DELETE
             FROM public.account AS acc
             WHERE
-                acc.txn_signature = NEW.signature, acc.slot = NEW.slot 
+                acc.txn_signature = NEW.signature AND acc.slot = NEW.slot 
             RETURNS
                 acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch, 
                 acc.data, NEW.index, acc.updated_on, acc.txn_signature
