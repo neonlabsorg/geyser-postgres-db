@@ -272,7 +272,7 @@ BEGIN
                 old.slot = max_slot AND old.write_version < max_write_version
                 -- searchin in slots below start slot - write version ignored (for each slot it starts from 0)
                 OR old.slot < max_slot
-            )
+            );
 END;
 $get_latest_accounts_older$ LANGUAGE plpgsql;
 
@@ -546,7 +546,7 @@ BEGIN
             acc2.write_version AS write_version
         FROM public.account_audit AS acc2
         WHERE acc2.slot < max_slot
-        ORDER BY acc2.slot DESC, acc2.write_version DESC
+        ORDER BY acc2.pubkey, acc2.slot DESC, acc2.write_version DESC
     ) latest_versions
     ON
         latest_versions.pubkey = acc1.pubkey
