@@ -50,6 +50,7 @@ $find_slot_on_longest_branch$ LANGUAGE plpgsql;
 -----------------------------------------------------------------------------------------------------------------------
 -- Returns pre-accounts data for given transaction on a given slot
 CREATE OR REPLACE FUNCTION get_latest_accounts_one_slot(
+    max_slot BIGINT,
     current_slot BIGINT,
     max_write_version BIGINT,
     transaction_accounts BYTEA[]
@@ -85,7 +86,12 @@ BEGIN
         WHERE
             acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
             AND acc.slot = current_slot
-            AND acc.write_version < max_write_version
+            AND (
+                -- sarching in the slot where search started - write version determines order
+                acc.slot = max_slot AND acc.write_version < max_write_version
+                -- searchin in slots below start slot - write version ignored (for each slot it starts from 0)
+                OR acc.slot != max_slot
+            )
         ORDER BY
             acc.pubkey,
             acc.slot DESC,
@@ -155,6 +161,7 @@ BEGIN
         FROM
             unnest(branch_slots) AS current_slot,
             get_latest_accounts_one_slot(
+                max_slot,
                 current_slot, 
                 max_write_version, 
                 transaction_accounts
@@ -207,8 +214,12 @@ BEGIN
         FROM public.account_audit AS acc
         WHERE
             acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
-            AND acc.slot <= max_slot
-            AND acc.write_version < max_write_version
+            AND (
+                -- sarching in the slot where search started - write version determines order
+                acc.slot = max_slot AND acc.write_version < max_write_version
+                -- searchin in slots below start slot - write version ignored (for each slot it starts from 0)
+                OR acc.slot < max_slot
+            )
         ORDER BY
             acc.pubkey,
             acc.slot DESC,
@@ -256,8 +267,12 @@ BEGIN
         FROM public.older_account AS old
         WHERE
             old.pubkey IN (SELECT * FROM unnest(transaction_accounts))
-            AND old.slot <= max_slot
-            AND old.write_version < max_write_version;
+            AND (
+                -- sarching in the slot where search started - write version determines order
+                old.slot = max_slot AND old.write_version < max_write_version
+                -- searchin in slots below start slot - write version ignored (for each slot it starts from 0)
+                OR old.slot < max_slot
+            )
 END;
 $get_latest_accounts_older$ LANGUAGE plpgsql;
 
@@ -525,13 +540,13 @@ BEGIN
         acc1.txn_signature
     FROM public.account_audit AS acc1
     INNER JOIN (
-        SELECT
+        SELECT DISTINCT ON (acc2.pubkey)
             acc2.pubkey AS pubkey,
-            MAX(acc2.slot) AS slot,
-            MAX(acc2.write_version) AS write_version
+            acc2.slot AS slot,
+            acc2.write_version AS write_version
         FROM public.account_audit AS acc2
         WHERE acc2.slot < max_slot
-        GROUP BY acc2.pubkey
+        ORDER BY acc2.slot DESC, acc2.write_version DESC
     ) latest_versions
     ON
         latest_versions.pubkey = acc1.pubkey
