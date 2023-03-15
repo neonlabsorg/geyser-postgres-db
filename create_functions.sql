@@ -626,7 +626,7 @@ CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
                 acc.txn_signature = NEW.signature AND acc.slot = NEW.slot 
             RETURNING
                 acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch, 
-                acc.data, NEW.index, acc.updated_on, acc.txn_signature
+                acc.data, NEW.write_version, acc.updated_on, acc.txn_signature
         )
         INSERT INTO public.account_audit (
             pubkey, owner, lamports, slot, executable, rent_epoch, 
