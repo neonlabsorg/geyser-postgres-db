@@ -33,6 +33,6 @@ SELECT cron.schedule(
 -- Setup account ordering
 SELECT cron.schedule(
     'order_accounts', 
-    '*/1 * * * * *', 
+    '1 seconds', 
     'CALL public.order_accounts()'
 );

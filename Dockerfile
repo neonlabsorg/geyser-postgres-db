@@ -3,7 +3,7 @@ ARG POSTGRES_IMAGE
 FROM $POSTGRES_IMAGE
 
 ENV PG_PARTMAN_VERSION 'v4.7.1'
-ENV PG_CRON_VERSION 'v1.4.2'
+ENV PG_CRON_VERSION 'v1.5.1'
 
 RUN apk add --no-cache --virtual .fetch-deps \
         ca-certificates \
