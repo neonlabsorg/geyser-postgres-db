@@ -632,7 +632,7 @@ CREATE FUNCTION order_accounts() RETURNS trigger AS $order_accounts$
             updated_on TIMESTAMP NOT NULL,
             txn_signature BYTEA
         );
-
+        
         -- match transactions and accounts by transaction signature and slot
         INSERT INTO public.items_to_move AS mv(
             pubkey,
