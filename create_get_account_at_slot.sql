@@ -1,7 +1,9 @@
 -----------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION get_account_at_slot_from_audit(
     in_pubkey BYTEA,
-    in_slot BIGINT
+    in_slot BIGINT,
+    max_slot BIGINT,
+    max_write_version BIGINT
 )
 
 RETURNS TABLE (
@@ -32,7 +34,18 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.pubkey = in_pubkey AND acc.slot <= in_slot
+            acc.pubkey = in_pubkey 
+            AND (
+                -- common case
+                -- used to select latest version of account on a moment of a given in_slot 
+                max_slot IS NULL AND acc.slot <= in_slot
+                -- case for get_pre_accounts
+                -- used to select version of account preliminary to some particular transaction
+                OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (
+                    acc.slot = max_slot AND acc.write_version < max_write_version
+                    OR acc.slot < max_slot
+                ) 
+            )
         ORDER BY 
             acc.pubkey,
             acc.slot DESC,
@@ -44,7 +57,9 @@ $get_account_at_slot_from_audit$ LANGUAGE plpgsql;
 -----------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION get_account_at_root(
     in_pubkey BYTEA,
-    first_rooted_slot BIGINT
+    first_rooted_slot BIGINT,
+    max_slot BIGINT,
+    max_write_version BIGINT
 )
 
 RETURNS TABLE (
@@ -64,7 +79,13 @@ AS $get_account_at_root$
 BEGIN
     RETURN QUERY
         WITH results AS (
-            SELECT * FROM get_account_at_slot_from_audit(in_pubkey, first_rooted_slot)
+            SELECT * 
+            FROM get_account_at_slot_from_audit(
+                in_pubkey, 
+                first_rooted_slot, 
+                max_slot, 
+                max_write_version
+            )
             UNION
             SELECT
                 old.pubkey,
@@ -81,6 +102,16 @@ BEGIN
                 old.pubkey = in_pubkey
         )
         SELECT * FROM results AS res
+        WHERE
+            -- common case
+            -- used to select latest version of account on a moment of a given first_rooted_slot 
+            max_slot IS NULL AND res.slot <= first_rooted_slot
+            -- case for get_pre_accounts
+            -- used to select version of account preliminary to some particular transaction
+            OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (
+                res.slot = max_slot AND res.write_version < max_write_version
+                OR res.slot < max_slot
+            )
         ORDER BY res.slot DESC, res.write_version DESC 
         LIMIT 1;
 END;
@@ -89,7 +120,9 @@ $get_account_at_root$ LANGUAGE plpgsql;
 -----------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION get_account_at_single_slot(
     in_pubkey BYTEA,
-    in_slot BIGINT
+    in_slot BIGINT,
+    max_slot BIGINT,
+    max_write_version BIGINT
 )
 
 RETURNS TABLE (
@@ -120,8 +153,13 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.pubkey = in_pubkey
-            AND acc.slot = in_slot
+            acc.pubkey = in_pubkey AND acc.slot = in_slot AND (
+                max_slot IS NULL
+                OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (
+                    acc.slot = max_slot AND acc.write_version < max_write_version
+                    OR acc.slot < max_slot 
+                )
+            )
         LIMIT 1;
 END;
 $get_account_at_single_slot$ LANGUAGE plpgsql;
@@ -129,7 +167,9 @@ $get_account_at_single_slot$ LANGUAGE plpgsql;
 -----------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION get_account_at_branch(
     in_pubkey BYTEA,
-    branch_slots BIGINT[]
+    branch_slots BIGINT[],
+    max_slot BIGINT,
+    max_write_version BIGINT
 )
 
 RETURNS TABLE (
@@ -162,7 +202,9 @@ BEGIN
             unnest(branch_slots) AS current_slot,
             get_account_at_single_slot(
                 in_pubkey,
-                current_slot
+                current_slot,
+                max_slot,
+                max_write_version
             ) AS slot_results
         ORDER BY
             slot_results.pubkey,
@@ -176,7 +218,9 @@ $get_account_at_branch$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION get_account_at_slot_impl(
     in_pubkey BYTEA,
     branch_slots BIGINT[],
-    first_rooted_slot BIGINT
+    first_rooted_slot BIGINT,
+    max_slot BIGINT,
+    max_write_version BIGINT
 )
 
 RETURNS TABLE (
@@ -200,13 +244,17 @@ BEGIN
             -- down to first rooted slot
             SELECT * FROM get_account_at_branch(
                 in_pubkey,
-                branch_slots
+                branch_slots,
+                max_slot,
+                max_write_version
             )
             UNION
             -- Then apply fast search algorithm over rooted slots 
             SELECT * FROM get_account_at_root(
                 in_pubkey,
-                first_rooted_slot
+                first_rooted_slot,
+                max_slot,
+                max_write_version
             )
         )
         SELECT *
@@ -306,6 +354,12 @@ BEGIN
     SELECT * INTO first_rooted_slot FROM get_first_rooted_slot(in_slot);
 
     RETURN QUERY
-        SELECT * FROM get_account_at_slot_impl(in_pubkey, branch_slots, first_rooted_slot);
+        SELECT * FROM get_account_at_slot_impl(
+            in_pubkey, 
+            branch_slots, 
+            first_rooted_slot,
+            NULL, -- max_slot
+            NULL  -- max_write_version
+        );
 END;
 $get_account_at_slot$ LANGUAGE plpgsql;
