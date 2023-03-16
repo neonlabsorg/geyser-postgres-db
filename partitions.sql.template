@@ -29,3 +29,10 @@ SELECT cron.schedule(
     '${ACCOUNT_AUDIT_MAINTENANCE_SCHEDULE}', 
     'CALL public.account_audit_maintenance()'
 );
+
+-- Setup account ordering
+SELECT cron.schedule(
+    'order_accounts', 
+    '1 seconds', 
+    'CALL public.order_accounts()'
+);
