@@ -340,7 +340,12 @@ DECLARE
     transaction_slots BIGINT[];
     first_rooted_slot BIGINT;
    
-BEGIN                    
+BEGIN
+    LOCK TABLE public.transaction IN ACCESS SHARE;
+    LOCK TABLE public.slot IN ACCESS SHARE;
+    LOCK TABLE public.account_audit IN ACCESS SHARE;
+    LOCK TABLE public.older_account IN ACCESS SHARE;
+
     -- Query minimum write version of account update
     SELECT MIN(acc.write_version)
     INTO max_write_version
@@ -492,6 +497,9 @@ RETURNS TABLE (
 AS $get_account_at_slot$
 
 BEGIN
+    LOCK TABLE public.account_audit IN ACCESS SHARE;
+    LOCK TABLE public.older_account IN ACCESS SHARE;
+
     RETURN QUERY
         WITH results AS (
             SELECT * FROM get_account_at_slot_from_audit(in_pubkey, in_slot)
@@ -583,6 +591,9 @@ RETURNS TABLE (
 AS $get_recent_update_slot$
 
 BEGIN
+    LOCK TABLE public.account_audit IN ACCESS SHARE;
+    LOCK TABLE public.older_account IN ACCESS SHARE;
+
     RETURN QUERY
         WITH results AS (
             SELECT acc.slot, acc.write_version 
@@ -613,6 +624,8 @@ DECLARE
     retention_until_slot BIGINT;
 
 BEGIN
+    LOCK TABLE public.account_audit IN ACCESS EXCLUSIVE;
+
     SELECT MAX(retention)
     INTO retention_slots
     FROM partman.part_config
@@ -635,6 +648,10 @@ $account_audit_maintenance$ LANGUAGE plpgsql;
 
 CREATE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
+        LOCK TABLE public.account IN ACCESS EXCLUSIVE;
+        LOCK TABLE public.transaction IN ACCESS SHARE;
+        LOCK TABLE public.account_audit IN EXCLUSIVE;
+
         CREATE TABLE IF NOT EXISTS public.items_to_move (
             pubkey BYTEA,
             owner BYTEA,
