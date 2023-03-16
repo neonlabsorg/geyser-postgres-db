@@ -341,10 +341,10 @@ DECLARE
     first_rooted_slot BIGINT;
    
 BEGIN
-    LOCK TABLE public.transaction IN ACCESS SHARE;
-    LOCK TABLE public.slot IN ACCESS SHARE;
-    LOCK TABLE public.account_audit IN ACCESS SHARE;
-    LOCK TABLE public.older_account IN ACCESS SHARE;
+    LOCK TABLE public.transaction IN ACCESS SHARE MODE;
+    LOCK TABLE public.slot IN ACCESS SHARE MODE;
+    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
+    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
 
     -- Query minimum write version of account update
     SELECT MIN(acc.write_version)
@@ -497,8 +497,8 @@ RETURNS TABLE (
 AS $get_account_at_slot$
 
 BEGIN
-    LOCK TABLE public.account_audit IN ACCESS SHARE;
-    LOCK TABLE public.older_account IN ACCESS SHARE;
+    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
+    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
 
     RETURN QUERY
         WITH results AS (
@@ -591,8 +591,8 @@ RETURNS TABLE (
 AS $get_recent_update_slot$
 
 BEGIN
-    LOCK TABLE public.account_audit IN ACCESS SHARE;
-    LOCK TABLE public.older_account IN ACCESS SHARE;
+    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
+    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
 
     RETURN QUERY
         WITH results AS (
@@ -624,7 +624,7 @@ DECLARE
     retention_until_slot BIGINT;
 
 BEGIN
-    LOCK TABLE public.account_audit IN ACCESS EXCLUSIVE;
+    LOCK TABLE public.account_audit IN ACCESS EXCLUSIVE MODE;
 
     SELECT MAX(retention)
     INTO retention_slots
@@ -648,9 +648,9 @@ $account_audit_maintenance$ LANGUAGE plpgsql;
 
 CREATE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
-        LOCK TABLE public.account IN ACCESS EXCLUSIVE;
-        LOCK TABLE public.transaction IN ACCESS SHARE;
-        LOCK TABLE public.account_audit IN EXCLUSIVE;
+        LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
+        LOCK TABLE public.transaction IN ACCESS SHARE MODE;
+        LOCK TABLE public.account_audit IN EXCLUSIVE MODE;
 
         CREATE TABLE IF NOT EXISTS public.items_to_move (
             pubkey BYTEA,
