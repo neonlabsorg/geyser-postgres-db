@@ -646,28 +646,29 @@ $account_audit_maintenance$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
-CREATE UNLOGGED TABLE public.items_to_move (
-    pubkey BYTEA,
-    owner BYTEA,
-    lamports BIGINT NOT NULL,
-    slot BIGINT NOT NULL,
-    executable BOOL NOT NULL,
-    rent_epoch BIGINT NOT NULL,
-    data BYTEA,
-    write_version BIGINT NOT NULL,
-    updated_on TIMESTAMP NOT NULL,
-    txn_signature BYTEA
-);
-
 CREATE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
-        LOCK TABLE public.items_to_move IN ACCESS EXCLUSIVE MODE;
         LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
         LOCK TABLE public.transaction IN ACCESS SHARE MODE;
         LOCK TABLE public.account_audit IN EXCLUSIVE MODE;
 
+        CREATE TEMPORARY TABLE items_to_move (
+            pubkey BYTEA,
+            owner BYTEA,
+            lamports BIGINT NOT NULL,
+            slot BIGINT NOT NULL,
+            executable BOOL NOT NULL,
+            rent_epoch BIGINT NOT NULL,
+            data BYTEA,
+            write_version BIGINT NOT NULL,
+            updated_on TIMESTAMP NOT NULL,
+            txn_signature BYTEA
+        )
+        ON COMMIT DROP;
+
+
         -- match transactions and accounts by transaction signature and slot
-        INSERT INTO public.items_to_move AS mv(
+        INSERT INTO items_to_move AS mv(
             pubkey,
             owner,
             lamports,
@@ -700,7 +701,7 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
 		WITH txn_accounts AS (
             DELETE
             FROM public.account AS acc
-            USING public.items_to_move AS mv
+            USING items_to_move AS mv
             WHERE
                 acc.txn_signature = mv.txn_signature AND acc.slot = mv.slot 
             RETURNING
@@ -712,9 +713,6 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
             data, write_version, updated_on, txn_signature
         )
         SELECT * FROM txn_accounts;
-
-        -- clean temporary table for next operation
-        TRUNCATE TABLE public.items_to_move;
 
         -- Find accounts with zero txn_signature and
         -- move them into account_audit table with write_version replaced by 0
