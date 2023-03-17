@@ -4,7 +4,7 @@
 -- The table storing accounts
 
 
-CREATE TEMPORARY TABLE public.account (
+CREATE UNLOGGED TABLE public.account (
     pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,

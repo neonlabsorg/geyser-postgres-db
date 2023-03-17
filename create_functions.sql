@@ -646,7 +646,7 @@ $account_audit_maintenance$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
-CREATE TEMPORARY TABLE public.items_to_move (
+CREATE UNLOGGED TABLE public.items_to_move (
     pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,
