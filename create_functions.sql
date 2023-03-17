@@ -646,7 +646,7 @@ $account_audit_maintenance$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS public.items_to_move (
+CREATE TEMPORARY TABLE IF NOT EXISTS public.items_to_move (
     pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,
