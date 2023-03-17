@@ -646,24 +646,25 @@ $account_audit_maintenance$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
+CREATE TABLE IF NOT EXISTS public.items_to_move (
+    pubkey BYTEA,
+    owner BYTEA,
+    lamports BIGINT NOT NULL,
+    slot BIGINT NOT NULL,
+    executable BOOL NOT NULL,
+    rent_epoch BIGINT NOT NULL,
+    data BYTEA,
+    write_version BIGINT NOT NULL,
+    updated_on TIMESTAMP NOT NULL,
+    txn_signature BYTEA
+);
+
 CREATE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
+        LOCK TABLE public.items_to_move IN ACCESS EXCLUSIVE MODE;
         LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
         LOCK TABLE public.transaction IN ACCESS SHARE MODE;
         LOCK TABLE public.account_audit IN EXCLUSIVE MODE;
-
-        CREATE TABLE IF NOT EXISTS public.items_to_move (
-            pubkey BYTEA,
-            owner BYTEA,
-            lamports BIGINT NOT NULL,
-            slot BIGINT NOT NULL,
-            executable BOOL NOT NULL,
-            rent_epoch BIGINT NOT NULL,
-            data BYTEA,
-            write_version BIGINT NOT NULL,
-            updated_on TIMESTAMP NOT NULL,
-            txn_signature BYTEA
-        );
 
         -- match transactions and accounts by transaction signature and slot
         INSERT INTO public.items_to_move AS mv(
