@@ -4,7 +4,7 @@
 -- The table storing accounts
 
 
-CREATE TABLE public.account (
+CREATE TEMPORARY TABLE public.account (
     pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,
