@@ -734,8 +734,12 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         SET processed = TRUE
         FROM items_to_move AS mv
         WHERE
-            acc.txn_signature = mv.txn_signature 
-            AND acc.slot = mv.slot;
+			acc.processed = FALSE
+			AND (
+            	acc.txn_signature IS NULL
+            	OR acc.txn_signature = mv.txn_signature 
+            	AND acc.slot = mv.slot
+			);
     END;
-    
+
 $order_accounts$ LANGUAGE plpgsql;
