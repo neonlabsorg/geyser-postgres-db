@@ -14,10 +14,11 @@ CREATE UNLOGGED TABLE public.account (
     data BYTEA,
     write_version BIGINT NOT NULL,
     updated_on TIMESTAMP NOT NULL,
-    txn_signature BYTEA
+    txn_signature BYTEA,
+    processed BOOL DEFAULT FALSE
 );
 
-CREATE INDEX account_txn_signature_slot ON public.account(txn_signature, slot);
+CREATE INDEX account_txn_signature_slot ON public.account(processed, txn_signature, slot);
 
 -- The table storing slot information
 CREATE TABLE public.slot (

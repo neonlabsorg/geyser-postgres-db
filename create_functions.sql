@@ -666,7 +666,6 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         )
         ON COMMIT DROP;
 
-
         -- match transactions and accounts by transaction signature and slot
         INSERT INTO items_to_move AS mv(
             pubkey,
@@ -694,41 +693,44 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         FROM public.account AS acc
         INNER JOIN public.transaction AS txn
         ON
-            acc.txn_signature = txn.signature AND acc.slot = txn.slot;
+            acc.processed = FALSE AND acc.txn_signature = txn.signature AND acc.slot = txn.slot;
 
+        -- find accounts with empty txn_signature (move them anyway with write_version set to 0)
+        INSERT INTO items_to_move AS mv(
+            pubkey,
+            owner,
+            lamports,
+            slot,
+            executable,
+            rent_epoch,
+            data,
+            write_version,
+            updated_on,
+            txn_signature
+        )
+        SELECT
+            acc.pubkey,
+            acc.owner,
+            acc.lamports,
+            acc.slot,
+            acc.executable,
+            acc.rent_epoch,
+            acc.data,
+            0,
+            acc.updated_on,
+            acc.txn_signature
+        FROM public.account AS acc
+        WHERE 
+            acc.processed = FALSE AND acc.txn_signature IS NULL;
 
-        -- Move found accounts from account to account_audit
-		WITH txn_accounts AS (
-            DELETE
-            FROM public.account AS acc
-            USING items_to_move AS mv
-            WHERE
-                acc.txn_signature = mv.txn_signature AND acc.slot = mv.slot 
-            RETURNING
-                acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch, 
-                acc.data, mv.write_version, acc.updated_on, acc.txn_signature
-        )
-        INSERT INTO public.account_audit (
-            pubkey, owner, lamports, slot, executable, rent_epoch, 
-            data, write_version, updated_on, txn_signature
-        )
-        SELECT * FROM txn_accounts;
+        INSERT INTO public.account_audit
+        SELECT * FROM items_to_move;
 
-        -- Find accounts with zero txn_signature and
-        -- move them into account_audit table with write_version replaced by 0
-        WITH system_accounts AS (
-            DELETE
-            FROM public.account AS acc
-            WHERE acc.txn_signature IS NULL
-            RETURNING
-                acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch,
-                acc.data, 0, acc.updated_on, acc.txn_signature
-        )
-        INSERT INTO public.account_audit (
-            pubkey, owner, lamports, slot, executable, rent_epoch, 
-            data, write_version, updated_on, txn_signature
-        )
-        SELECT * FROM system_accounts;
+        UPDATE public.account AS acc
+        SET processed = TRUE
+        FROM items_to_move AS mv
+        WHERE
+            acc.processed = FALSE AND acc.txn_signature = mv.txn_signature AND acc.slot = mv.slot;
     END;
 
 $order_accounts$ LANGUAGE plpgsql;
