@@ -694,7 +694,7 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         INNER JOIN public.transaction AS txn
         ON
             acc.txn_signature = txn.signature 
-            AND acc.slot = txn.slot;
+            AND acc.slot = txn.slot
         WHERE
             acc.processed = FALSE;
 
@@ -734,8 +734,8 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         SET processed = TRUE
         FROM items_to_move AS mv
         WHERE
-            AND acc.txn_signature = mv.txn_signature 
+            acc.txn_signature = mv.txn_signature 
             AND acc.slot = mv.slot;
     END;
-
+    
 $order_accounts$ LANGUAGE plpgsql;
