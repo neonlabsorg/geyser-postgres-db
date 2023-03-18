@@ -693,7 +693,10 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         FROM public.account AS acc
         INNER JOIN public.transaction AS txn
         ON
-            acc.processed = FALSE AND acc.txn_signature = txn.signature AND acc.slot = txn.slot;
+            acc.txn_signature = txn.signature 
+            AND acc.slot = txn.slot;
+        WHERE
+            acc.processed = FALSE;
 
         -- find accounts with empty txn_signature (move them anyway with write_version set to 0)
         INSERT INTO items_to_move AS mv(
@@ -721,7 +724,8 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
             acc.txn_signature
         FROM public.account AS acc
         WHERE 
-            acc.processed = FALSE AND acc.txn_signature IS NULL;
+            acc.processed = FALSE 
+            AND acc.txn_signature IS NULL;
 
         INSERT INTO public.account_audit
         SELECT * FROM items_to_move;
@@ -730,7 +734,8 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         SET processed = TRUE
         FROM items_to_move AS mv
         WHERE
-            acc.processed = FALSE AND acc.txn_signature = mv.txn_signature AND acc.slot = mv.slot;
+            AND acc.txn_signature = mv.txn_signature 
+            AND acc.slot = mv.slot;
     END;
 
 $order_accounts$ LANGUAGE plpgsql;
