@@ -11,7 +11,7 @@ SELECT partman.create_parent(
     '${ACCOUNT_AUDIT_PART_SLOT_COUNT}',  --p_interval
     NULL,                           --p_constraint_cols
     4,                              --p_premake
-    'off',                          --p_automatic_maintenance
+    'on',                           --p_automatic_maintenance
     '${ACCOUNT_AUDIT_START_SLOT}'   --p_start_partition
 );
 
@@ -23,13 +23,6 @@ SET
     jobmon = FALSE                                  -- pg_jobmon isnot used (RDS supports pg_cron instead)
 WHERE parent_table = 'public.account_audit';
 
--- Setup maintenance schedule
-SELECT cron.schedule(
-    'account_audit_maintenance', 
-    '${ACCOUNT_AUDIT_MAINTENANCE_SCHEDULE}', 
-    'CALL public.account_audit_maintenance()'
-);
-
 -- Setup account partitions
 -- Single partition should contain ${TEMP_ACCOUNT_PART_SLOT_COUNT} slots
 SELECT partman.create_parent(
@@ -39,7 +32,7 @@ SELECT partman.create_parent(
     '${TEMP_ACCOUNT_PART_SLOT_COUNT}',  --p_interval
     NULL,                           --p_constraint_cols
     4,                              --p_premake
-    'off',                          --p_automatic_maintenance
+    'on',                           --p_automatic_maintenance
     '${ACCOUNT_AUDIT_START_SLOT}'   --p_start_partition
 );
 
@@ -53,7 +46,7 @@ WHERE parent_table = 'public.account';
 
 -- Setup maintenance schedule
 SELECT cron.schedule(
-    'account_maintenance', 
-    '${TEMP_ACCOUNT_MAINTENANCE_SCHEDULE}', 
-    'CALL public.account_maintenance()'
+    'maintenance_proc', 
+    '${MAINTENANCE_SCHEDULE}', 
+    'CALL public.maintenance_proc()'
 );

@@ -300,7 +300,7 @@ AS $get_latest_rooted_accounts$
 BEGIN
     RETURN QUERY
         -- root branch consist of historical states in account_audit 
-        -- plus olderst available state in older_accounts - collect from both
+        -- plus olderst available state in older_account - collect from both
         -- and take only latest for each account from transaction_accounts
         WITH results AS (
             SELECT * FROM get_latest_accounts_audit(max_slot, max_write_version, transaction_accounts)
@@ -531,7 +531,15 @@ CREATE OR REPLACE PROCEDURE update_older_account(
 
 AS $update_older_account$
 
+DECLARE
+    min_slot BIGINT;
+
 BEGIN
+    -- determine slot to start 
+    -- (maximum slot which was already processed and stored in older_account)
+    SELECT COALESCE(MAX(old.slot), 0) INTO min_slot
+    FROM public.older_account;
+
     -- add recent states of all accounts from account_audit
     -- before slot max_slot into older_account table
     INSERT INTO public.older_account AS older
@@ -553,7 +561,7 @@ BEGIN
             acc2.slot AS slot,
             acc2.write_version AS write_version
         FROM public.account_audit AS acc2
-        WHERE acc2.slot < max_slot
+        WHERE acc2.slot >= min_slot AND acc2.slot < max_slot
         ORDER BY acc2.pubkey, acc2.slot DESC, acc2.write_version DESC
     ) latest_versions
     ON
@@ -561,7 +569,7 @@ BEGIN
         AND latest_versions.slot = acc1.slot
         AND latest_versions.write_version = acc1.write_version
     WHERE
-        acc1.slot < max_slot
+        acc1.slot >= min_slot AND acc1.slot < max_slot
     ON CONFLICT (pubkey) DO UPDATE SET 
 		slot=excluded.slot, 
 		owner=excluded.owner, 
@@ -615,9 +623,9 @@ END;
 $get_recent_update_slot$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE PROCEDURE account_audit_maintenance()
+CREATE OR REPLACE PROCEDURE maintenance_proc()
 
-AS $account_audit_maintenance$
+AS $maintenance_proc$
 
 DECLARE
     retention_slots BIGINT;
@@ -636,29 +644,9 @@ BEGIN
     FROM public.account_audit;
 
     CALL update_older_account(retention_until_slot);
-    PERFORM FROM partman.run_maintenance(
-        'public.account_audit',
-        NULL,
-        FALSE
-    );
+    PERFORM FROM partman.run_maintenance(NULL, NULL, FALSE);
 END;
-$account_audit_maintenance$ LANGUAGE plpgsql;
-
------------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE PROCEDURE account_maintenance()
-
-AS $account_maintenance$
-
-BEGIN
-    LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
-
-    PERFORM FROM partman.run_maintenance(
-        'public.account',
-        NULL,
-        FALSE
-    );
-END;
-$account_maintenance$ LANGUAGE plpgsql;
+$maintenance_proc$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
