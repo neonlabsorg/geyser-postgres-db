@@ -10,7 +10,7 @@ SELECT partman.create_parent(
     'native',                       --p_type
     '${ACCOUNT_AUDIT_PART_SLOT_COUNT}',  --p_interval
     NULL,                           --p_constraint_cols
-    4,                              --p_premake
+    10,                              --p_premake
     'on',                           --p_automatic_maintenance
     '${ACCOUNT_AUDIT_START_SLOT}'   --p_start_partition
 );
@@ -31,7 +31,7 @@ SELECT partman.create_parent(
     'native',                       --p_type
     '${TEMP_ACCOUNT_PART_SLOT_COUNT}',  --p_interval
     NULL,                           --p_constraint_cols
-    4,                              --p_premake
+    10,                             --p_premake
     'on',                           --p_automatic_maintenance
     '${ACCOUNT_AUDIT_START_SLOT}'   --p_start_partition
 );
