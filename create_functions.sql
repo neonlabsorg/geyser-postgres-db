@@ -728,7 +728,8 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
             AND acc.txn_signature IS NULL;
 
         INSERT INTO public.account_audit
-        SELECT * FROM items_to_move;
+        SELECT * FROM items_to_move
+        ON CONFLICT ON CONSTRAINT account_audit_pk DO NOTHING;
 
         UPDATE public.account AS acc
         SET processed = TRUE

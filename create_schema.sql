@@ -233,9 +233,10 @@ CREATE TABLE public.account_audit (
     data BYTEA,
     write_version BIGINT NOT NULL,
     updated_on TIMESTAMP NOT NULL,
-    txn_signature BYTEA
+    txn_signature BYTEA,
+
+    CONSTRAINT account_audit_pk PRIMARY KEY(pubkey, slot, write_version)
 ) PARTITION BY RANGE (slot);
 
-CREATE INDEX account_audit_pubkey_slot_wv ON  public.account_audit (pubkey, slot, write_version);
 CREATE INDEX account_audit_txn_signature ON public.account_audit (txn_signature);
 CREATE INDEX account_audit_slot ON public.account_audit (slot);
