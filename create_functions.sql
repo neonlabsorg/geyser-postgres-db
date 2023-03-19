@@ -645,6 +645,22 @@ END;
 $account_audit_maintenance$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
+CREATE OR REPLACE PROCEDURE account_maintenance()
+
+AS $account_maintenance$
+
+BEGIN
+    LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
+
+    PERFORM FROM partman.run_maintenance(
+        'public.account',
+        NULL,
+        FALSE
+    );
+END;
+$account_maintenance$ LANGUAGE plpgsql;
+
+-----------------------------------------------------------------------------------------------------------------------
 
 CREATE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN

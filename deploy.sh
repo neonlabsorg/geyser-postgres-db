@@ -3,7 +3,42 @@
 set -e
 
 if [ -z "$PGPASSWORD" ]; then
-   PGPASSWORD=solana-pass
+  PGPASSWORD=solana-pass
+fi
+
+if [ -z "$PGDATA" ]; then
+  echo "PGDATA is not defined!"
+  exit 1
+fi
+
+if [ -z "$ACCOUNT_AUDIT_PART_SLOT_COUNT" ]; then
+  echo "ACCOUNT_AUDIT_PART_SLOT_COUNT is not defined!"
+  exit 1
+fi
+
+if [ -z "$ACCOUNT_AUDIT_START_SLOT" ]; then
+  echo "ACCOUNT_AUDIT_START_SLOT is not defined!"
+  exit 1
+fi
+
+if [ -z "$ACCOUNT_AUDIT_RETENTION_SLOTS" ]; then
+  echo "ACCOUNT_AUDIT_RETENTION_SLOTS is not defined!"
+  exit 1
+fi
+
+if [ -z "$ACCOUNT_AUDIT_MAINTENANCE_SCHEDULE" ]; then
+  echo "ACCOUNT_AUDIT_MAINTENANCE_SCHEDULE is not defined!"
+  exit 1
+fi
+
+if [ -z "$TEMP_ACCOUNT_PART_SLOT_COUNT" ]; then
+  echo "TEMP_ACCOUNT_PART_SLOT_COUNT is not defined!"
+  exit 1
+fi
+
+if [ -z "$TEMP_ACCOUNT_MAINTENANCE_SCHEDULE" ]; then
+  echo "TEMP_ACCOUNT_MAINTENANCE_SCHEDULE is not defined!"
+  exit 1
 fi
 
 echo "Enable pg_cron extension..."

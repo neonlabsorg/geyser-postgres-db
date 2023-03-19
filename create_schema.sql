@@ -16,7 +16,7 @@ CREATE UNLOGGED TABLE public.account (
     updated_on TIMESTAMP NOT NULL,
     txn_signature BYTEA,
     processed BOOL DEFAULT FALSE
-);
+) PARTITION BY RANGE slot;
 
 CREATE INDEX account_txn_signature_slot ON public.account(processed, txn_signature, slot);
 
