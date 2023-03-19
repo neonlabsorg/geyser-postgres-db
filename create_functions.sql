@@ -537,8 +537,8 @@ DECLARE
 BEGIN
     -- determine slot to start 
     -- (maximum slot which was already processed and stored in older_account)
-    SELECT COALESCE(MAX(old.slot), 0) INTO min_slot
-    FROM public.older_account;
+    SELECT COALESCE(MAX(older.slot), 0) INTO min_slot
+    FROM public.older_account AS older;
 
     -- add recent states of all accounts from account_audit
     -- before slot max_slot into older_account table
