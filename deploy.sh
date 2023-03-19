@@ -11,18 +11,18 @@ if [ -z "$PGDATA" ]; then
   exit 1
 fi
 
-if [ -z "$ACCOUNT_AUDIT_PART_SLOT_COUNT" ]; then
-  echo "ACCOUNT_AUDIT_PART_SLOT_COUNT is not defined!"
+if [ -z "$HISTORY_PART_SLOT_COUNT" ]; then
+  echo "HISTORY_PART_SLOT_COUNT is not defined!"
   exit 1
 fi
 
-if [ -z "$ACCOUNT_AUDIT_START_SLOT" ]; then
-  echo "ACCOUNT_AUDIT_START_SLOT is not defined!"
+if [ -z "$HISTORY_START_SLOT" ]; then
+  echo "HISTORY_START_SLOT is not defined!"
   exit 1
 fi
 
-if [ -z "$ACCOUNT_AUDIT_RETENTION_SLOTS" ]; then
-  echo "ACCOUNT_AUDIT_RETENTION_SLOTS is not defined!"
+if [ -z "$HISTORY_RETENTION_SLOTS" ]; then
+  echo "HISTORY_RETENTION_SLOTS is not defined!"
   exit 1
 fi
 

@@ -170,7 +170,7 @@ CREATE TABLE public.transaction (
     write_version BIGINT,
     updated_on TIMESTAMP NOT NULL,
     CONSTRAINT transaction_pk PRIMARY KEY (slot, signature)
-);
+) PARTITION BY RANGE (slot);
 
 CREATE INDEX transaction_signature ON public.transaction (signature);
 
