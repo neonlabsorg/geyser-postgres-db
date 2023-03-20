@@ -653,8 +653,6 @@ $maintenance_proc$ LANGUAGE plpgsql;
 CREATE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
         LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
-        LOCK TABLE public.transaction IN ACCESS SHARE MODE;
-        LOCK TABLE public.account_audit IN EXCLUSIVE MODE;
 
         CREATE TEMPORARY TABLE items_to_move (
             pubkey BYTEA,
