@@ -6,6 +6,11 @@
 - Deployment scipt - deploy.sh
 - CI dockerfile - Dockerfile
 
+## History flow
+Picture below represents data flow between different parts of Tracer DB. The most of tables in DB are partitioned and have retention period for its data in the sake of disk space economy. *account* table is temporary table for storing account update events. *order_accounts* job shots once a second and performs matching of account update events with transactions by transaction signature to order accounts according to order of transactions in block. This is done for compatibility with several validators producing update events into single database. *write_version* field of original account update event is based on atomic counter inside validator and are not suitable to syncronize data from different validators. Transaction indices instead are the same for all validators and can be used to restore order of account update events.
+
+![Tracer DB History Flow](./tracerdb_history_flow.png)
+
 ## Deployment
 
 1. Install pg_partman and pg_cron extensions (please, refer to original docs https://github.com/pgpartman/pg_partman https://github.com/citusdata/pg_cron)
