@@ -929,7 +929,7 @@ RETURNS BIGINT[]
 AS $get_branch_slots$
 
 DECLARE
-    branch_slots BIGINT[] = [];
+    branch_slots BIGINT[] = NULL;
 
 BEGIN
     -- Find all slots on the given branch starting from max_slot down to first rooted slot
@@ -1002,7 +1002,7 @@ RETURNS TABLE (
 AS $get_account_at_slot$
 
 DECLARE
-    branch_slots BIGINT[] = [];
+    branch_slots BIGINT[] = NULL;
     first_rooted_slot BIGINT = NULL;
     branch_bottom_parent = NULL;
 
