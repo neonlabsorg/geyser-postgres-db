@@ -656,9 +656,9 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
 $order_accounts$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION get_account_at_slot_from_audit(
+CREATE OR REPLACE FUNCTION get_account_at_root_from_audit(
     in_pubkey BYTEA,
-    in_slot BIGINT,
+    in_rooted_slot BIGINT,
     max_slot BIGINT,
     max_write_version BIGINT
 )
@@ -675,7 +675,7 @@ RETURNS TABLE (
     signature BYTEA
 )
 
-AS $get_account_at_slot_from_audit$
+AS $get_account_at_root_from_audit$
 
 BEGIN
     RETURN QUERY
@@ -691,11 +691,10 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.pubkey = in_pubkey 
+            acc.pubkey = in_pubkey AND acc.slot <= in_rooted_slot
             AND (
                 -- common case
-                -- used to select latest version of account on a moment of a given in_slot 
-                max_slot IS NULL AND acc.slot <= in_slot
+                max_slot IS NULL
                 -- case for get_pre_accounts
                 -- used to select version of account preliminary to some particular transaction
                 OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (
@@ -709,7 +708,7 @@ BEGIN
             acc.write_version DESC 
         LIMIT 1;
 END;
-$get_account_at_slot_from_audit$ LANGUAGE plpgsql;
+$get_account_at_root_from_audit$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION get_account_at_root(
@@ -737,7 +736,7 @@ BEGIN
     RETURN QUERY
         WITH results AS (
             SELECT * 
-            FROM get_account_at_slot_from_audit(
+            FROM get_account_at_root_from_audit(
                 in_pubkey, 
                 first_rooted_slot, 
                 max_slot, 
@@ -930,7 +929,7 @@ RETURNS BIGINT[]
 AS $get_branch_slots$
 
 DECLARE
-    branch_slots BIGINT[];
+    branch_slots BIGINT[] = [];
 
 BEGIN
     -- Find all slots on the given branch starting from max_slot down to first rooted slot
@@ -940,7 +939,7 @@ BEGIN
             first.parent,
             first.status
         FROM public.slot AS first
-        WHERE first.slot = start_slot and first.status <> 'rooted'
+        WHERE first.slot = start_slot AND first.status <> 'rooted'
         UNION
             SELECT
                 next.slot,
@@ -1002,13 +1001,27 @@ RETURNS TABLE (
 
 AS $get_account_at_slot$
 
-DECLARE 
-    branch_slots BIGINT[] = NULL;
+DECLARE
+    branch_slots BIGINT[] = [];
     first_rooted_slot BIGINT = NULL;
+    branch_bottom_parent = NULL;
 
 BEGIN
-    SELECT * INTO branch_slots FROM get_branch_slots(in_slot);
     SELECT * INTO first_rooted_slot FROM get_first_rooted_slot(in_slot);
+
+    IF first_rooted_slot != in_slot THEN
+        -- we are on branch
+        SELECT * INTO branch_slots FROM get_branch_slots(in_slot);
+
+        SELECT s.parent INTO branch_bottom_parent 
+        FROM public.slot AS s
+        WHERE s.slot = branch_slots[array_length(branch_slots, 1) - 1];
+
+        IF branch_bottom_parent <> first_rooted_slot THEN
+            RAISE EXCEPTION 'get_account_at_slot(%, %): 
+            slot is not yet belongs to any branch', in_pubkey, in_slot;
+        END IF;
+    END IF;
 
     RETURN QUERY
         SELECT * FROM get_account_at_slot_impl(
