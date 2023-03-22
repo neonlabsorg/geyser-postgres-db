@@ -33,5 +33,25 @@ Picture below represents data flow between different parts of Tracer DB. The mos
    ```bash
     POSTGRES_HOST=<your-server-address> POSTGRES_DB=solana POSTGRES_USER=solana-user PGPASSWORD=solana-pass HISTORY_PART_SLOT_COUNT=216000 HISTORY_START_SLOT=0 HISTORY_RETENTION_SLOTS=6480000 TEMP_ACCOUNT_PART_SLOT_COUNT=4500 TEMP_ACCOUNT_RETENTION_SLOTS=54000 MAINTENANCE_SCHEDULE="*/30 * * * *" ./deploy_schema.sh
    ```
+
+   Example of docker-compose service:
+
+   ```yaml
+   tracer_db_deployer:
+    container_name: tracer_db_deployer
+    image: neonlabsorg/tracerdb_deployer:latest
+    environment:
+      POSTGRES_HOST: your.postgres.db
+      POSTGRES_DB: solana
+      POSTGRES_USER: solana-user
+      PGPASSWORD: solana-pass
+      HISTORY_PART_SLOT_COUNT: 216000
+      HISTORY_START_SLOT: 0
+      HISTORY_RETENTION_SLOTS: 6480000
+      TEMP_ACCOUNT_PART_SLOT_COUNT: 4500
+      TEMP_ACCOUNT_RETENTION_SLOTS: 54000
+      MAINTENANCE_SCHEDULE: '*/30 * * * *'
+   ``` 
+
    This command will create DB schema with account_audit table splitted by days, retention interval of 30 days and maintenance happened every day at 00:30 AM 
 
