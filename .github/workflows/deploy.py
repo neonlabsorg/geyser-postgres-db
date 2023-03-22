@@ -89,13 +89,16 @@ def finalize_image(head_ref_branch, github_ref, github_sha):
             tag = head_ref_branch.split('/')[-1]
 
         docker_client.login(username=DOCKER_USER, password=DOCKER_PASSWORD)
+        
         out = docker_client.pull(f"{SERVER_IMAGE_NAME}:{github_sha}", decode=True, stream=True)
-        out = docker_client.pull(f"{DEPLOYER_IMAGE_NAME}:{github_sha}", decode=True, stream=True)
+        process_output(out)
+        docker_client.tag(f"{SERVER_IMAGE_NAME}:{github_sha}", f"{SERVER_IMAGE_NAME}:{tag}")
+        out = docker_client.push(f"{SERVER_IMAGE_NAME}:{tag}", decode=True, stream=True)
         process_output(out)
 
-        docker_client.tag(f"{SERVER_IMAGE_NAME}:{github_sha}", f"{SERVER_IMAGE_NAME}:{tag}")
+        out = docker_client.pull(f"{DEPLOYER_IMAGE_NAME}:{github_sha}", decode=True, stream=True)
+        process_output(out)
         docker_client.tag(f"{DEPLOYER_IMAGE_NAME}:{github_sha}", f"{DEPLOYER_IMAGE_NAME}:{tag}")
-        out = docker_client.push(f"{SERVER_IMAGE_NAME}:{tag}", decode=True, stream=True)
         out = docker_client.push(f"{DEPLOYER_IMAGE_NAME}:{tag}", decode=True, stream=True)
         process_output(out)
     else:
