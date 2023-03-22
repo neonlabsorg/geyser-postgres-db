@@ -894,7 +894,7 @@ BEGIN
                 max_write_version
             )
         )
-        SELECT * DISTINCT ON (res.pubkey)
+        SELECT DISTINCT ON (res.pubkey) * 
         FROM results AS res
         ORDER BY res.pubkey, res.slot DESC, res.write_version DESC;
 END;
