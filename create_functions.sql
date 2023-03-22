@@ -50,6 +50,7 @@ $find_slot_on_longest_branch$ LANGUAGE plpgsql;
 -----------------------------------------------------------------------------------------------------------------------
 -- Returns pre-accounts data for given transaction on a given slot
 CREATE OR REPLACE FUNCTION get_latest_accounts_one_slot(
+    max_slot BIGINT,
     current_slot BIGINT,
     max_write_version BIGINT,
     transaction_accounts BYTEA[]
@@ -85,7 +86,12 @@ BEGIN
         WHERE
             acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
             AND acc.slot = current_slot
-            AND acc.write_version < max_write_version
+            AND (
+                -- sarching in the slot where search started - write version determines order
+                acc.slot = max_slot AND acc.write_version < max_write_version
+                -- searchin in slots below start slot - write version ignored (for each slot it starts from 0)
+                OR acc.slot != max_slot
+            )
         ORDER BY
             acc.pubkey,
             acc.slot DESC,
@@ -155,6 +161,7 @@ BEGIN
         FROM
             unnest(branch_slots) AS current_slot,
             get_latest_accounts_one_slot(
+                max_slot,
                 current_slot, 
                 max_write_version, 
                 transaction_accounts
@@ -207,8 +214,12 @@ BEGIN
         FROM public.account_audit AS acc
         WHERE
             acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
-            AND acc.slot <= max_slot
-            AND acc.write_version < max_write_version
+            AND (
+                -- sarching in the slot where search started - write version determines order
+                acc.slot = max_slot AND acc.write_version < max_write_version
+                -- searchin in slots below start slot - write version ignored (for each slot it starts from 0)
+                OR acc.slot < max_slot
+            )
         ORDER BY
             acc.pubkey,
             acc.slot DESC,
@@ -256,8 +267,12 @@ BEGIN
         FROM public.older_account AS old
         WHERE
             old.pubkey IN (SELECT * FROM unnest(transaction_accounts))
-            AND old.slot <= max_slot
-            AND old.write_version < max_write_version;
+            AND (
+                -- sarching in the slot where search started - write version determines order
+                old.slot = max_slot AND old.write_version < max_write_version
+                -- searchin in slots below start slot - write version ignored (for each slot it starts from 0)
+                OR old.slot < max_slot
+            );
 END;
 $get_latest_accounts_older$ LANGUAGE plpgsql;
 
@@ -285,7 +300,7 @@ AS $get_latest_rooted_accounts$
 BEGIN
     RETURN QUERY
         -- root branch consist of historical states in account_audit 
-        -- plus olderst available state in older_accounts - collect from both
+        -- plus olderst available state in older_account - collect from both
         -- and take only latest for each account from transaction_accounts
         WITH results AS (
             SELECT * FROM get_latest_accounts_audit(max_slot, max_write_version, transaction_accounts)
@@ -325,7 +340,12 @@ DECLARE
     transaction_slots BIGINT[];
     first_rooted_slot BIGINT;
    
-BEGIN                    
+BEGIN
+    LOCK TABLE public.transaction IN ACCESS SHARE MODE;
+    LOCK TABLE public.slot IN ACCESS SHARE MODE;
+    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
+    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
+
     -- Query minimum write version of account update
     SELECT MIN(acc.write_version)
     INTO max_write_version
@@ -477,6 +497,9 @@ RETURNS TABLE (
 AS $get_account_at_slot$
 
 BEGIN
+    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
+    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
+
     RETURN QUERY
         WITH results AS (
             SELECT * FROM get_account_at_slot_from_audit(in_pubkey, in_slot)
@@ -508,11 +531,19 @@ CREATE OR REPLACE PROCEDURE update_older_account(
 
 AS $update_older_account$
 
+DECLARE
+    min_slot BIGINT;
+
 BEGIN
+    -- determine slot to start 
+    -- (maximum slot which was already processed and stored in older_account)
+    SELECT COALESCE(MAX(older.slot), 0) INTO min_slot
+    FROM public.older_account AS older;
+
     -- add recent states of all accounts from account_audit
     -- before slot max_slot into older_account table
-    INSERT INTO public.older_account
-    SELECT
+    INSERT INTO public.older_account AS older
+    SELECT DISTINCT ON (acc1.pubkey)
         acc1.pubkey,
         acc1.owner,
         acc1.lamports,
@@ -525,20 +556,20 @@ BEGIN
         acc1.txn_signature
     FROM public.account_audit AS acc1
     INNER JOIN (
-        SELECT
+        SELECT DISTINCT ON (acc2.pubkey)
             acc2.pubkey AS pubkey,
-            MAX(acc2.slot) AS slot,
-            MAX(acc2.write_version) AS write_version
+            acc2.slot AS slot,
+            acc2.write_version AS write_version
         FROM public.account_audit AS acc2
-        WHERE acc2.slot < max_slot
-        GROUP BY acc2.pubkey
+        WHERE acc2.slot >= min_slot AND acc2.slot < max_slot
+        ORDER BY acc2.pubkey, acc2.slot DESC, acc2.write_version DESC
     ) latest_versions
     ON
         latest_versions.pubkey = acc1.pubkey
         AND latest_versions.slot = acc1.slot
         AND latest_versions.write_version = acc1.write_version
     WHERE
-        acc1.slot < max_slot
+        acc1.slot >= min_slot AND acc1.slot < max_slot
     ON CONFLICT (pubkey) DO UPDATE SET 
 		slot=excluded.slot, 
 		owner=excluded.owner, 
@@ -548,7 +579,10 @@ BEGIN
         data=excluded.data, 
 		write_version=excluded.write_version, 
 		updated_on=excluded.updated_on, 
-		txn_signature=excluded.txn_signature;
+		txn_signature=excluded.txn_signature
+        WHERE 
+            older.slot < excluded.slot 
+            OR (older.slot = excluded.slot AND older.write_version < excluded.write_version);
 END;
 $update_older_account$ LANGUAGE plpgsql;
 
@@ -565,6 +599,9 @@ RETURNS TABLE (
 AS $get_recent_update_slot$
 
 BEGIN
+    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
+    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
+
     RETURN QUERY
         WITH results AS (
             SELECT acc.slot, acc.write_version 
@@ -586,15 +623,17 @@ END;
 $get_recent_update_slot$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE PROCEDURE account_audit_maintenance()
+CREATE OR REPLACE PROCEDURE maintenance_proc()
 
-AS $account_audit_maintenance$
+AS $maintenance_proc$
 
 DECLARE
     retention_slots BIGINT;
     retention_until_slot BIGINT;
 
 BEGIN
+    LOCK TABLE public.account_audit IN ACCESS EXCLUSIVE MODE;
+
     SELECT MAX(retention)
     INTO retention_slots
     FROM partman.part_config
@@ -605,10 +644,105 @@ BEGIN
     FROM public.account_audit;
 
     CALL update_older_account(retention_until_slot);
-    PERFORM FROM partman.run_maintenance(
-        'public.account_audit',
-        NULL,
-        FALSE
-    );
+    PERFORM FROM partman.run_maintenance(NULL, NULL, FALSE);
 END;
-$account_audit_maintenance$ LANGUAGE plpgsql;
+$maintenance_proc$ LANGUAGE plpgsql;
+
+-----------------------------------------------------------------------------------------------------------------------
+
+CREATE PROCEDURE order_accounts() AS $order_accounts$
+    BEGIN
+        LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
+
+        CREATE TEMPORARY TABLE items_to_move (
+            pubkey BYTEA,
+            owner BYTEA,
+            lamports BIGINT NOT NULL,
+            slot BIGINT NOT NULL,
+            executable BOOL NOT NULL,
+            rent_epoch BIGINT NOT NULL,
+            data BYTEA,
+            write_version BIGINT NOT NULL,
+            updated_on TIMESTAMP NOT NULL,
+            txn_signature BYTEA
+        )
+        ON COMMIT DROP;
+
+        -- match transactions and accounts by transaction signature and slot
+        INSERT INTO items_to_move AS mv(
+            pubkey,
+            owner,
+            lamports,
+            slot,
+            executable,
+            rent_epoch,
+            data,
+            write_version,
+            updated_on,
+            txn_signature
+        )
+        SELECT
+            acc.pubkey,
+            acc.owner,
+            acc.lamports,
+            acc.slot,
+            acc.executable,
+            acc.rent_epoch,
+            acc.data,
+            txn.write_version,
+            acc.updated_on,
+            acc.txn_signature 
+        FROM public.account AS acc
+        INNER JOIN public.transaction AS txn
+        ON
+            acc.txn_signature = txn.signature 
+            AND acc.slot = txn.slot
+        WHERE
+            acc.processed = FALSE;
+
+        -- find accounts with empty txn_signature (move them anyway with write_version set to 0)
+        INSERT INTO items_to_move AS mv(
+            pubkey,
+            owner,
+            lamports,
+            slot,
+            executable,
+            rent_epoch,
+            data,
+            write_version,
+            updated_on,
+            txn_signature
+        )
+        SELECT
+            acc.pubkey,
+            acc.owner,
+            acc.lamports,
+            acc.slot,
+            acc.executable,
+            acc.rent_epoch,
+            acc.data,
+            0,
+            acc.updated_on,
+            acc.txn_signature
+        FROM public.account AS acc
+        WHERE 
+            acc.processed = FALSE 
+            AND acc.txn_signature IS NULL;
+
+        INSERT INTO public.account_audit
+        SELECT * FROM items_to_move
+        ON CONFLICT ON CONSTRAINT account_audit_pk DO NOTHING;
+
+        UPDATE public.account AS acc
+        SET processed = TRUE
+        FROM items_to_move AS mv
+        WHERE
+			acc.processed = FALSE
+			AND (
+            	acc.txn_signature IS NULL
+            	OR acc.txn_signature = mv.txn_signature 
+            	AND acc.slot = mv.slot
+			);
+    END;
+
+$order_accounts$ LANGUAGE plpgsql;
