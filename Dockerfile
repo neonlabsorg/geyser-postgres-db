@@ -80,3 +80,5 @@ COPY create_schema.sql \
 COPY setup_db.sh /docker-entrypoint-initdb.d/
 
 RUN chmod a+r -R /opt/scripts
+
+RUN ls
