@@ -1004,7 +1004,7 @@ AS $get_account_at_slot$
 DECLARE
     branch_slots BIGINT[] = NULL;
     first_rooted_slot BIGINT = NULL;
-    branch_bottom_parent = NULL;
+    branch_bottom_parent BIGINT = NULL;
 
 BEGIN
     SELECT * INTO first_rooted_slot FROM get_first_rooted_slot(in_slot);
