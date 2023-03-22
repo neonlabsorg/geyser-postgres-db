@@ -1006,7 +1006,7 @@ BEGIN
 
     RETURN QUERY
         SELECT * FROM get_accounts_at_slot_impl(
-            ARRAY([in_pubkey]), 
+            ARRAY[in_pubkey], 
             branch_slots, 
             first_rooted_slot,
             NULL, -- max_slot
