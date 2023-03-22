@@ -800,7 +800,7 @@ BEGIN
                     OR acc.slot < max_slot 
                 )
             )
-        ORDER BY acc.pubkey, acc.slot DESC acc.write_version DESC;
+        ORDER BY acc.pubkey, acc.slot, DESC acc.write_version DESC;
 END;
 $get_accounts_at_single_slot$ LANGUAGE plpgsql;
 
