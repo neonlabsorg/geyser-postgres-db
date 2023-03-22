@@ -1,0 +1,7 @@
+ARG ALPINE_IMAGE
+
+FROM $ALPINE_IMAGE
+RUN apk --no-cache add postgresql12-client
+COPY deploy_schema.sh /usr/bin/
+
+ENTRYPOINT [ "deploy_schema.sh" ]

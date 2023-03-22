@@ -1,13 +1,19 @@
-#!/bin/bash
+#!/bin/sh
 
 set -e
 
-if [ -z "$PGPASSWORD" ]; then
-  PGPASSWORD=solana-pass
+if [ -z "$POSTGRES_HOST" ]; then
+  echo "POSTGRES_HOST is not defined!"
+  exit 1
 fi
 
-if [ -z "$PGDATA" ]; then
-  echo "PGDATA is not defined!"
+if [ -z "$POSTGRES_DB" ]; then
+  echo "POSTGRES_DB is not defined!"
+  exit 1
+fi
+
+if [ -z "$PGPASSWORD" ]; then
+  echo "PGPASSWORD is not defined!"
   exit 1
 fi
 
@@ -36,39 +42,22 @@ if [ -z "$TEMP_ACCOUNT_PART_SLOT_COUNT" ]; then
   exit 1
 fi
 
-echo "Enable pg_cron extension..."
-cat <<EOT >> ${PGDATA}/postgresql.conf
-shared_preload_libraries = 'pg_cron'
-EOT
-
-cat <<EOT >> ${PGDATA}/postgresql.conf
-cron.database_name='${POSTGRES_DB:-solana}'
-EOT
-
-cat <<EOT >> ${PGDATA}/postgresql.conf
-max_wal_size=8GB
-EOT
-
-cat <<EOT >> ${PGDATA}/postgresql.conf
-shared_buffers=1GB
-EOT
-
-echo "Restarting PostgreSQL server..."
-pg_ctl restart
-
 echo "Deploying DB schema..."
 psql \
-  --dbname=solana \
+  --host=$POSTGRES_HOST \
+  --dbname=$POSTGRES_DB \
   --username=$POSTGRES_USER \
   --file=/opt/scripts/create_schema.sql
   
 echo "Deploying DB functions..."
 psql \
-  --dbname=solana \
+  --host=$POSTGRES_HOST \
+  --dbname=$POSTGRES_DB \
   --username=$POSTGRES_USER \
   --file=/opt/scripts/create_functions.sql
 
 echo "Finalizing DB partitions and maintenance schedule..."
 envsubst < /opt/scripts/partitions.sql.template | psql \
-  --dbname=solana \
+  --host=$POSTGRES_HOST \
+  --dbname=$POSTGRES_DB \
   --username=$POSTGRES_USER

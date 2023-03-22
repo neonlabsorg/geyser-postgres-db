@@ -3,7 +3,8 @@
 ## Contents
 
 - DB schema - create_schema.sql, create_functions.sql, partitions.sql.template, drop_schema.sql
-- Deployment scipt - deploy.sh
+- DB setup script - setup_db.sh
+- Deployment scipt - deploy_schema.sh
 - CI dockerfile - Dockerfile
 
 ## History flow
@@ -16,7 +17,8 @@ Picture below represents data flow between different parts of Tracer DB. The mos
 1. Install pg_partman and pg_cron extensions (please, refer to original docs https://github.com/pgpartman/pg_partman https://github.com/citusdata/pg_cron)
 2. Start database engine
 3. run deployment script on the same machine with DB and with next env variables:
-   - PGDATA - path to postgres configuration files (e. g. /var/lib/postgresql/data)
+   - POSTGRES_HOST - address of Postgres server
+   - POSTGRES_DB - name of database
    - POSTGRES_USER - name of the deployer-user
    - PGPASSWORD - password of deployer-user
    - HISTORY_PART_SLOT_COUNT - number of solana slots which will be stored in a single partition of history. **Recommended value - 216000 (about one day of history)**
@@ -29,7 +31,7 @@ Picture below represents data flow between different parts of Tracer DB. The mos
    Example of the command:
    
    ```bash
-   PGDATA=/var/lib/postgresql/data POSTGRES_USER=solana-user PGPASSWORD=solana-pass HISTORY_PART_SLOT_COUNT=216000 HISTORY_START_SLOT=0 HISTORY_RETENTION_SLOTS=6480000 TEMP_ACCOUNT_PART_SLOT_COUNT=4500 TEMP_ACCOUNT_RETENTION_SLOTS=54000 MAINTENANCE_SCHEDULE="*/30 * * * *" ./deploy.sh
+    POSTGRES_HOST=<your-server-address> POSTGRES_DB=solana POSTGRES_USER=solana-user PGPASSWORD=solana-pass HISTORY_PART_SLOT_COUNT=216000 HISTORY_START_SLOT=0 HISTORY_RETENTION_SLOTS=6480000 TEMP_ACCOUNT_PART_SLOT_COUNT=4500 TEMP_ACCOUNT_RETENTION_SLOTS=54000 MAINTENANCE_SCHEDULE="*/30 * * * *" ./deploy_schema.sh
    ```
    This command will create DB schema with account_audit table splitted by days, retention interval of 30 days and maintenance happened every day at 00:30 AM 
 

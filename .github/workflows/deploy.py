@@ -27,8 +27,10 @@ ERR_MSG_TPL = {
 
 DOCKER_USER = os.environ.get("DHUBU")
 DOCKER_PASSWORD = os.environ.get("DHUBP")
-IMAGE_NAME = 'neonlabsorg/tracerdb'
+SERVER_IMAGE_NAME = 'neonlabsorg/tracerdb'
+DEPLOYER_IMAGE_NAME = 'neonlabsorg/tracerdb_deployer'
 POSTGRES_VERSION = '14-alpine'
+ALPINE_VERSION = '3.15'
 
 VERSION_BRANCH_TEMPLATE = r"[vt]{1}\d{1,2}\.\d{1,2}\.x.*"
 docker_client = docker.APIClient()
@@ -47,9 +49,17 @@ def build_docker_image(github_sha):
     buildargs = { "REVISION": github_sha,
                   "POSTGRES_IMAGE": postgres_image }
 
-    tag = f"{IMAGE_NAME}:{github_sha}"
-    click.echo("start build")
-    output = docker_client.build(tag=tag, buildargs=buildargs, path="./", decode=True)
+    tag = f"{SERVER_IMAGE_NAME}:{github_sha}"
+    click.echo("start building postgres server for CI")
+    output = docker_client.build(tag=tag, buildargs=buildargs, path="./", decode=True, dockerfile='Dockerfile')
+    process_output(output)
+
+    alpine_image = f'alpine:{ALPINE_VERSION}'
+    docker_client.pull(alpine_image)
+    buildargs = { "ALPINE_IMAGE": alpine_image }
+    tag = f"{DEPLOYER_IMAGE_NAME}:{github_sha}"
+    click.echo("start building deployer")
+    output = docker_client.build(tag=tag, buildargs=buildargs, path="./", decode=True, dockerfile='Dockerfile.deployer')
     process_output(output)
 
 
@@ -57,7 +67,8 @@ def build_docker_image(github_sha):
 @click.option('--github_sha')
 def publish_image(github_sha):
     docker_client.login(username=DOCKER_USER, password=DOCKER_PASSWORD)
-    out = docker_client.push(f"{IMAGE_NAME}:{github_sha}", decode=True, stream=True)
+    out = docker_client.push(f"{SERVER_IMAGE_NAME}:{github_sha}", decode=True, stream=True)
+    out = docker_client.push(f"{DEPLOYER_IMAGE_NAME}:{github_sha}", decode=True, stream=True)
     process_output(out)
 
 
@@ -78,11 +89,14 @@ def finalize_image(head_ref_branch, github_ref, github_sha):
             tag = head_ref_branch.split('/')[-1]
 
         docker_client.login(username=DOCKER_USER, password=DOCKER_PASSWORD)
-        out = docker_client.pull(f"{IMAGE_NAME}:{github_sha}", decode=True, stream=True)
+        out = docker_client.pull(f"{SERVER_IMAGE_NAME}:{github_sha}", decode=True, stream=True)
+        out = docker_client.pull(f"{DEPLOYER_IMAGE_NAME}:{github_sha}", decode=True, stream=True)
         process_output(out)
 
-        docker_client.tag(f"{IMAGE_NAME}:{github_sha}", f"{IMAGE_NAME}:{tag}")
-        out = docker_client.push(f"{IMAGE_NAME}:{tag}", decode=True, stream=True)
+        docker_client.tag(f"{SERVER_IMAGE_NAME}:{github_sha}", f"{SERVER_IMAGE_NAME}:{tag}")
+        docker_client.tag(f"{DEPLOYER_IMAGE_NAME}:{github_sha}", f"{DEPLOYER_IMAGE_NAME}:{tag}")
+        out = docker_client.push(f"{SERVER_IMAGE_NAME}:{tag}", decode=True, stream=True)
+        out = docker_client.push(f"{DEPLOYER_IMAGE_NAME}:{tag}", decode=True, stream=True)
         process_output(out)
     else:
         click.echo("The image is not published, please create tag for publishing")
