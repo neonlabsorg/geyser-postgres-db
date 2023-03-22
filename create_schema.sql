@@ -4,7 +4,7 @@
 -- The table storing accounts
 
 
-CREATE TABLE public.account (
+CREATE UNLOGGED TABLE public.account (
     pubkey BYTEA,
     owner BYTEA,
     lamports BIGINT NOT NULL,
@@ -14,10 +14,11 @@ CREATE TABLE public.account (
     data BYTEA,
     write_version BIGINT NOT NULL,
     updated_on TIMESTAMP NOT NULL,
-    txn_signature BYTEA
-);
+    txn_signature BYTEA,
+    processed BOOL DEFAULT FALSE
+) PARTITION BY RANGE (slot);
 
-CREATE INDEX account_txn_signature_slot ON public.account(txn_signature, slot);
+CREATE INDEX account_txn_signature_slot ON public.account(processed, txn_signature, slot);
 
 -- The table storing slot information
 CREATE TABLE public.slot (
@@ -169,7 +170,7 @@ CREATE TABLE public.transaction (
     write_version BIGINT,
     updated_on TIMESTAMP NOT NULL,
     CONSTRAINT transaction_pk PRIMARY KEY (slot, signature)
-);
+) PARTITION BY RANGE (slot);
 
 CREATE INDEX transaction_signature ON public.transaction (signature);
 
@@ -232,9 +233,10 @@ CREATE TABLE public.account_audit (
     data BYTEA,
     write_version BIGINT NOT NULL,
     updated_on TIMESTAMP NOT NULL,
-    txn_signature BYTEA
+    txn_signature BYTEA,
+
+    CONSTRAINT account_audit_pk PRIMARY KEY(pubkey, slot, write_version)
 ) PARTITION BY RANGE (slot);
 
-CREATE INDEX account_audit_pubkey_slot_wv ON  public.account_audit (pubkey, slot, write_version);
 CREATE INDEX account_audit_txn_signature ON public.account_audit (txn_signature);
 CREATE INDEX account_audit_slot ON public.account_audit (slot);

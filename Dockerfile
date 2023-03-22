@@ -69,14 +69,6 @@ RUN set -ex \
     # Delete the dependancies for downloading and building the extensions, we no longer need them
     && apk del .fetch-deps .build-deps
 
-RUN apk add --no-cache gettext
+COPY setup_db.sh /docker-entrypoint-initdb.d/
 
-COPY create_schema.sql \
-    create_functions.sql \
-    drop_schema.sql \
-    partitions.sql.template \
-    /opt/scripts/
-
-COPY deploy.sh /docker-entrypoint-initdb.d/
-
-RUN chmod a+r -R /opt/scripts
+RUN ls

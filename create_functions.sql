@@ -300,7 +300,7 @@ AS $get_latest_rooted_accounts$
 BEGIN
     RETURN QUERY
         -- root branch consist of historical states in account_audit 
-        -- plus olderst available state in older_accounts - collect from both
+        -- plus olderst available state in older_account - collect from both
         -- and take only latest for each account from transaction_accounts
         WITH results AS (
             SELECT * FROM get_latest_accounts_audit(max_slot, max_write_version, transaction_accounts)
@@ -340,7 +340,12 @@ DECLARE
     transaction_slots BIGINT[];
     first_rooted_slot BIGINT;
    
-BEGIN                    
+BEGIN
+    LOCK TABLE public.transaction IN ACCESS SHARE MODE;
+    LOCK TABLE public.slot IN ACCESS SHARE MODE;
+    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
+    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
+
     -- Query minimum write version of account update
     SELECT MIN(acc.write_version)
     INTO max_write_version
@@ -434,7 +439,15 @@ CREATE OR REPLACE PROCEDURE update_older_account(
 
 AS $update_older_account$
 
+DECLARE
+    min_slot BIGINT;
+
 BEGIN
+    -- determine slot to start 
+    -- (maximum slot which was already processed and stored in older_account)
+    SELECT COALESCE(MAX(older.slot), 0) INTO min_slot
+    FROM public.older_account AS older;
+
     -- add recent states of all accounts from account_audit
     -- before slot max_slot into older_account table
     INSERT INTO public.older_account AS older
@@ -456,7 +469,7 @@ BEGIN
             acc2.slot AS slot,
             acc2.write_version AS write_version
         FROM public.account_audit AS acc2
-        WHERE acc2.slot < max_slot
+        WHERE acc2.slot >= min_slot AND acc2.slot < max_slot
         ORDER BY acc2.pubkey, acc2.slot DESC, acc2.write_version DESC
     ) latest_versions
     ON
@@ -464,7 +477,7 @@ BEGIN
         AND latest_versions.slot = acc1.slot
         AND latest_versions.write_version = acc1.write_version
     WHERE
-        acc1.slot < max_slot
+        acc1.slot >= min_slot AND acc1.slot < max_slot
     ON CONFLICT (pubkey) DO UPDATE SET 
 		slot=excluded.slot, 
 		owner=excluded.owner, 
@@ -494,6 +507,9 @@ RETURNS TABLE (
 AS $get_recent_update_slot$
 
 BEGIN
+    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
+    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
+
     RETURN QUERY
         WITH results AS (
             SELECT acc.slot, acc.write_version 
@@ -515,15 +531,17 @@ END;
 $get_recent_update_slot$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE PROCEDURE account_audit_maintenance()
+CREATE OR REPLACE PROCEDURE maintenance_proc()
 
-AS $account_audit_maintenance$
+AS $maintenance_proc$
 
 DECLARE
     retention_slots BIGINT;
     retention_until_slot BIGINT;
 
 BEGIN
+    LOCK TABLE public.account_audit IN ACCESS EXCLUSIVE MODE;
+
     SELECT MAX(retention)
     INTO retention_slots
     FROM partman.part_config
@@ -534,19 +552,17 @@ BEGIN
     FROM public.account_audit;
 
     CALL update_older_account(retention_until_slot);
-    PERFORM FROM partman.run_maintenance(
-        'public.account_audit',
-        NULL,
-        FALSE
-    );
+    PERFORM FROM partman.run_maintenance(NULL, NULL, FALSE);
 END;
-$account_audit_maintenance$ LANGUAGE plpgsql;
+$maintenance_proc$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
 CREATE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
-        CREATE TABLE IF NOT EXISTS public.items_to_move (
+        LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
+
+        CREATE TEMPORARY TABLE items_to_move (
             pubkey BYTEA,
             owner BYTEA,
             lamports BIGINT NOT NULL,
@@ -557,10 +573,11 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
             write_version BIGINT NOT NULL,
             updated_on TIMESTAMP NOT NULL,
             txn_signature BYTEA
-        );
+        )
+        ON COMMIT DROP;
 
         -- match transactions and accounts by transaction signature and slot
-        INSERT INTO public.items_to_move AS mv(
+        INSERT INTO items_to_move AS mv(
             pubkey,
             owner,
             lamports,
@@ -586,44 +603,54 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         FROM public.account AS acc
         INNER JOIN public.transaction AS txn
         ON
-            acc.txn_signature = txn.signature AND acc.slot = txn.slot;
+            acc.txn_signature = txn.signature 
+            AND acc.slot = txn.slot
+        WHERE
+            acc.processed = FALSE;
 
+        -- find accounts with empty txn_signature (move them anyway with write_version set to 0)
+        INSERT INTO items_to_move AS mv(
+            pubkey,
+            owner,
+            lamports,
+            slot,
+            executable,
+            rent_epoch,
+            data,
+            write_version,
+            updated_on,
+            txn_signature
+        )
+        SELECT
+            acc.pubkey,
+            acc.owner,
+            acc.lamports,
+            acc.slot,
+            acc.executable,
+            acc.rent_epoch,
+            acc.data,
+            0,
+            acc.updated_on,
+            acc.txn_signature
+        FROM public.account AS acc
+        WHERE 
+            acc.processed = FALSE 
+            AND acc.txn_signature IS NULL;
 
-        -- Move found accounts from account to account_audit
-		WITH txn_accounts AS (
-            DELETE
-            FROM public.account AS acc
-            USING public.items_to_move AS mv
-            WHERE
-                acc.txn_signature = mv.txn_signature AND acc.slot = mv.slot 
-            RETURNING
-                acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch, 
-                acc.data, mv.write_version, acc.updated_on, acc.txn_signature
-        )
-        INSERT INTO public.account_audit (
-            pubkey, owner, lamports, slot, executable, rent_epoch, 
-            data, write_version, updated_on, txn_signature
-        )
-        SELECT * FROM txn_accounts;
+        INSERT INTO public.account_audit
+        SELECT * FROM items_to_move
+        ON CONFLICT ON CONSTRAINT account_audit_pk DO NOTHING;
 
-        -- clean temporary table for next operation
-        TRUNCATE TABLE public.items_to_move;
-
-        -- Find accounts with zero txn_signature and
-        -- move them into account_audit table with write_version replaced by 0
-        WITH system_accounts AS (
-            DELETE
-            FROM public.account AS acc
-            WHERE acc.txn_signature IS NULL
-            RETURNING
-                acc.pubkey, acc.owner, acc.lamports, acc.slot, acc.executable, acc.rent_epoch,
-                acc.data, 0, acc.updated_on, acc.txn_signature
-        )
-        INSERT INTO public.account_audit (
-            pubkey, owner, lamports, slot, executable, rent_epoch, 
-            data, write_version, updated_on, txn_signature
-        )
-        SELECT * FROM system_accounts;
+        UPDATE public.account AS acc
+        SET processed = TRUE
+        FROM items_to_move AS mv
+        WHERE
+			acc.processed = FALSE
+			AND (
+            	acc.txn_signature IS NULL
+            	OR acc.txn_signature = mv.txn_signature 
+            	AND acc.slot = mv.slot
+			);
     END;
 
 $order_accounts$ LANGUAGE plpgsql;

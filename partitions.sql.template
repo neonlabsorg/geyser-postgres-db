@@ -3,36 +3,71 @@ CREATE EXTENSION pg_partman SCHEMA partman;
 CREATE EXTENSION pg_cron;
 
 -- Setup account_audit partitions
--- Single partition should contain ${ACCOUNT_AUDIT_PART_SLOT_COUNT} slots
+-- Single partition should contain ${HISTORY_PART_SLOT_COUNT} slots
 SELECT partman.create_parent(
     'public.account_audit',         --p_parent_table
     'slot',                         --p_control
     'native',                       --p_type
-    '${ACCOUNT_AUDIT_PART_SLOT_COUNT}',  --p_interval
+    '${HISTORY_PART_SLOT_COUNT}',  --p_interval
     NULL,                           --p_constraint_cols
-    4,                              --p_premake
-    'off',                          --p_automatic_maintenance
-    '${ACCOUNT_AUDIT_START_SLOT}'   --p_start_partition
+    10,                              --p_premake
+    'on',                           --p_automatic_maintenance
+    '${HISTORY_START_SLOT}'   --p_start_partition
 );
 
 -- Setup account_audit retention
 UPDATE partman.part_config
 SET 
-    retention = '${ACCOUNT_AUDIT_RETENTION_SLOTS}', -- retention period
+    retention = '${HISTORY_RETENTION_SLOTS}', -- retention period
     retention_keep_table = FALSE,                   -- remove tables when retention period expired
     jobmon = FALSE                                  -- pg_jobmon isnot used (RDS supports pg_cron instead)
 WHERE parent_table = 'public.account_audit';
 
--- Setup maintenance schedule
-SELECT cron.schedule(
-    'account_audit_maintenance', 
-    '${ACCOUNT_AUDIT_MAINTENANCE_SCHEDULE}', 
-    'CALL public.account_audit_maintenance()'
+-- Setup account partitions
+-- Single partition should contain ${TEMP_ACCOUNT_PART_SLOT_COUNT} slots
+SELECT partman.create_parent(
+    'public.account',               --p_parent_table
+    'slot',                         --p_control
+    'native',                       --p_type
+    '${TEMP_ACCOUNT_PART_SLOT_COUNT}',  --p_interval
+    NULL,                           --p_constraint_cols
+    10,                             --p_premake
+    'on',                           --p_automatic_maintenance
+    '${HISTORY_START_SLOT}'         --p_start_partition
 );
 
--- Setup account ordering
+-- Setup account retention
+UPDATE partman.part_config
+SET 
+    retention = '${TEMP_ACCOUNT_RETENTION_SLOTS}',  -- retention period
+    retention_keep_table = FALSE,                   -- remove tables when retention period expired
+    jobmon = FALSE                                  -- pg_jobmon isnot used (RDS supports pg_cron instead)
+WHERE parent_table = 'public.account';
+
+-- Setup transaction partitions
+-- Single partition should contain ${HISTORY_PART_SLOT_COUNT} slots
+SELECT partman.create_parent(
+    'public.transaction',           --p_parent_table
+    'slot',                         --p_control
+    'native',                       --p_type
+    '${HISTORY_PART_SLOT_COUNT}',  --p_interval
+    NULL,                           --p_constraint_cols
+    10,                              --p_premake
+    'on',                           --p_automatic_maintenance
+    '${HISTORY_START_SLOT}'   --p_start_partition
+);
+
+-- Setup account_audit retention
+UPDATE partman.part_config
+SET 
+    retention = '${HISTORY_RETENTION_SLOTS}', -- retention period
+    retention_keep_table = FALSE,                   -- remove tables when retention period expired
+    jobmon = FALSE                                  -- pg_jobmon isnot used (RDS supports pg_cron instead)
+WHERE parent_table = 'public.transaction';
+
+-- Setup maintenance schedule
 SELECT cron.schedule(
-    'order_accounts', 
-    '1 seconds', 
-    'CALL public.order_accounts()'
+    'maintenance_proc', 
+    '${MAINTENANCE_SCHEDULE}', 
+    'CALL public.maintenance_proc()'
 );
