@@ -1,7 +1,13 @@
 ARG ALPINE_IMAGE
 
 FROM $ALPINE_IMAGE
-RUN apk --no-cache add postgresql12-client
+RUN apk --no-cache add postgresql12-client gettext
 COPY deploy_schema.sh /usr/bin/
+
+COPY create_schema.sql \
+    create_functions.sql \
+    drop_schema.sql \
+    partitions.sql.template \
+    /opt/scripts/
 
 ENTRYPOINT [ "deploy_schema.sh" ]
