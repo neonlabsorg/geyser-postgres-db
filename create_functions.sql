@@ -254,7 +254,8 @@ BEGIN
                 old.slot = max_slot AND old.write_version < max_write_version
                 -- searchin in slots below start slot - write version ignored (for each slot it starts from 0)
                 OR old.slot < max_slot
-            );
+            )
+        ORDER BY old.pubkey;
 END;
 $get_latest_accounts_older$ LANGUAGE plpgsql;
 
@@ -751,7 +752,7 @@ BEGIN
                 res.slot = max_slot AND res.write_version < max_write_version
                 OR res.slot < max_slot
             )
-        ORDER BY res.slot DESC, res.write_version DESC;
+        ORDER BY res.pubkey, res.slot DESC, res.write_version DESC;
 END;
 $get_accounts_at_root$ LANGUAGE plpgsql;
 
@@ -798,7 +799,8 @@ BEGIN
                     acc.slot = max_slot AND acc.write_version < max_write_version
                     OR acc.slot < max_slot 
                 )
-            );
+            )
+        ORDER BY acc.pubkey, acc.slot DESC acc.write_version DESC;
 END;
 $get_accounts_at_single_slot$ LANGUAGE plpgsql;
 
