@@ -228,7 +228,7 @@ CREATE TABLE public.account_audit (
     executable BOOL NOT NULL,
     rent_epoch BIGINT NOT NULL,
     data BYTEA,
-    write_version BIGINT NOT NULL,
+    write_version BIGINT,
     updated_on TIMESTAMP NOT NULL,
     txn_signature BYTEA,
 
@@ -245,7 +245,7 @@ CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
 		                           rent_epoch, data, write_version, updated_on, txn_signature)
             VALUES (NEW.pubkey, NEW.owner, NEW.lamports, NEW.slot,
                     NEW.executable, NEW.rent_epoch, NEW.data,
-                    NEW.write_version, NEW.updated_on, NEW.txn_signature);
+                    NULL, NEW.updated_on, NEW.txn_signature);
         RETURN NEW;
     END;
 
