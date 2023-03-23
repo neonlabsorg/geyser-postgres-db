@@ -544,7 +544,7 @@ $maintenance_proc$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
-CREATE PROCEDURE order_accounts() AS $order_accounts$
+CREATE OR REPLACE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
         LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
 
@@ -552,14 +552,14 @@ CREATE PROCEDURE order_accounts() AS $order_accounts$
         SET write_version = txn.write_version
         FROM public.transaction AS txn
         WHERE
-            acc.write_version = NULL
+            acc.write_version IS NULL
             AND acc.txn_signature = txn.signature
             AND acc.slot = txn.slot;
 
         UPDATE public.account_audit AS acc
         SET write_version = 0
         WHERE
-            acc.write_version = NULL
+            acc.write_version IS NULL
             AND acc.txn_signature = NULL;
     END;
 
