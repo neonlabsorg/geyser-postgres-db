@@ -84,7 +84,8 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
+            acc.write_version IS NOT NULL
+            AND acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
             AND acc.slot = current_slot
             AND (
                 -- sarching in the slot where search started - write version determines order
@@ -195,7 +196,8 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
+            acc.write_version IS NOT NULL
+            AND acc.pubkey IN (SELECT * FROM unnest(transaction_accounts))
             AND (
                 -- sarching in the slot where search started - write version determines order
                 acc.slot = max_slot AND acc.write_version < max_write_version
@@ -332,7 +334,7 @@ BEGIN
     SELECT MIN(acc.write_version)
     INTO max_write_version
     FROM public.account_audit AS acc
-    WHERE position(in_txn_signature in acc.txn_signature) > 0;
+    WHERE acc.write_version IS NOT NULL AND acc.txn_signature = in_txn_signature;
   
     -- find all occurencies of transaction in slots
     SELECT array_agg(txn.slot)
@@ -451,7 +453,8 @@ BEGIN
             acc2.slot AS slot,
             acc2.write_version AS write_version
         FROM public.account_audit AS acc2
-        WHERE acc2.slot >= min_slot AND acc2.slot < max_slot
+        WHERE 
+            acc2.write_version IS NOT NULL AND acc2.slot >= min_slot AND acc2.slot < max_slot
         ORDER BY acc2.pubkey, acc2.slot DESC, acc2.write_version DESC
     ) latest_versions
     ON
@@ -459,7 +462,7 @@ BEGIN
         AND latest_versions.slot = acc1.slot
         AND latest_versions.write_version = acc1.write_version
     WHERE
-        acc1.slot >= min_slot AND acc1.slot < max_slot
+        acc1.write_version IS NOT NULL AND acc1.slot >= min_slot AND acc1.slot < max_slot
     ON CONFLICT (pubkey) DO UPDATE SET 
 		slot=excluded.slot, 
 		owner=excluded.owner, 
@@ -496,8 +499,9 @@ BEGIN
         WITH results AS (
             SELECT acc.slot, acc.write_version 
             FROM public.account_audit AS acc
-            WHERE 
-                acc.pubkey = in_pubkey 
+            WHERE
+                acc.write_version IS NOT NULL
+                AND acc.pubkey = in_pubkey 
                 AND acc.slot <= max_slot 
             UNION
             SELECT old_acc.slot, old_acc.write_version
@@ -540,99 +544,23 @@ $maintenance_proc$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 
-CREATE PROCEDURE order_accounts() AS $order_accounts$
+CREATE OR REPLACE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
-        LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
+        LOCK TABLE public.account_audit IN ACCESS EXCLUSIVE MODE;
 
-        CREATE TEMPORARY TABLE items_to_move (
-            pubkey BYTEA,
-            owner BYTEA,
-            lamports BIGINT NOT NULL,
-            slot BIGINT NOT NULL,
-            executable BOOL NOT NULL,
-            rent_epoch BIGINT NOT NULL,
-            data BYTEA,
-            write_version BIGINT NOT NULL,
-            updated_on TIMESTAMP NOT NULL,
-            txn_signature BYTEA
-        )
-        ON COMMIT DROP;
-
-        -- match transactions and accounts by transaction signature and slot
-        INSERT INTO items_to_move AS mv(
-            pubkey,
-            owner,
-            lamports,
-            slot,
-            executable,
-            rent_epoch,
-            data,
-            write_version,
-            updated_on,
-            txn_signature
-        )
-        SELECT
-            acc.pubkey,
-            acc.owner,
-            acc.lamports,
-            acc.slot,
-            acc.executable,
-            acc.rent_epoch,
-            acc.data,
-            txn.write_version,
-            acc.updated_on,
-            acc.txn_signature 
-        FROM public.account AS acc
-        INNER JOIN public.transaction AS txn
-        ON
-            acc.txn_signature = txn.signature 
-            AND acc.slot = txn.slot
+        UPDATE public.account_audit AS acc
+        SET write_version = txn.write_version
+        FROM public.transaction AS txn
         WHERE
-            acc.processed = FALSE;
+            acc.write_version IS NULL
+            AND acc.txn_signature = txn.signature
+            AND acc.slot = txn.slot;
 
-        -- find accounts with empty txn_signature (move them anyway with write_version set to 0)
-        INSERT INTO items_to_move AS mv(
-            pubkey,
-            owner,
-            lamports,
-            slot,
-            executable,
-            rent_epoch,
-            data,
-            write_version,
-            updated_on,
-            txn_signature
-        )
-        SELECT
-            acc.pubkey,
-            acc.owner,
-            acc.lamports,
-            acc.slot,
-            acc.executable,
-            acc.rent_epoch,
-            acc.data,
-            0,
-            acc.updated_on,
-            acc.txn_signature
-        FROM public.account AS acc
-        WHERE 
-            acc.processed = FALSE 
+        UPDATE public.account_audit AS acc
+        SET write_version = -1
+        WHERE
+            acc.write_version IS NULL
             AND acc.txn_signature IS NULL;
-
-        INSERT INTO public.account_audit
-        SELECT * FROM items_to_move
-        ON CONFLICT ON CONSTRAINT account_audit_pk DO NOTHING;
-
-        UPDATE public.account AS acc
-        SET processed = TRUE
-        FROM items_to_move AS mv
-        WHERE
-			acc.processed = FALSE
-			AND (
-            	acc.txn_signature IS NULL
-            	OR acc.txn_signature = mv.txn_signature 
-            	AND acc.slot = mv.slot
-			);
     END;
 
 $order_accounts$ LANGUAGE plpgsql;
@@ -673,7 +601,8 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.pubkey IN (SELECT * FROM unnest(accounts))
+            acc.write_version IS NOT NULL
+            AND acc.pubkey IN (SELECT * FROM unnest(accounts))
             AND acc.slot <= in_rooted_slot
             AND (
                 -- common case
@@ -791,7 +720,8 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.pubkey IN (SELECT * FROM unnest(accounts))
+            acc.write_version IS NOT NULL
+            AND acc.pubkey IN (SELECT * FROM unnest(accounts))
             AND acc.slot = in_slot AND (
                 max_slot IS NULL
                 OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (

@@ -4,8 +4,8 @@
 -- The table storing accounts
 
 
-CREATE UNLOGGED TABLE public.account (
-    pubkey BYTEA,
+CREATE TABLE public.account (
+    pubkey BYTEA PRIMARY KEY,
     owner BYTEA,
     lamports BIGINT NOT NULL,
     slot BIGINT NOT NULL,
@@ -14,11 +14,8 @@ CREATE UNLOGGED TABLE public.account (
     data BYTEA,
     write_version BIGINT NOT NULL,
     updated_on TIMESTAMP NOT NULL,
-    txn_signature BYTEA,
-    processed BOOL DEFAULT FALSE
-) PARTITION BY RANGE (slot);
-
-CREATE INDEX account_txn_signature_slot ON public.account(processed, txn_signature, slot);
+    txn_signature BYTEA
+);
 
 -- The table storing slot information
 CREATE TABLE public.slot (
@@ -231,12 +228,26 @@ CREATE TABLE public.account_audit (
     executable BOOL NOT NULL,
     rent_epoch BIGINT NOT NULL,
     data BYTEA,
-    write_version BIGINT NOT NULL,
+    write_version BIGINT,
     updated_on TIMESTAMP NOT NULL,
-    txn_signature BYTEA,
-
-    CONSTRAINT account_audit_pk PRIMARY KEY(pubkey, slot, write_version)
+    txn_signature BYTEA
 ) PARTITION BY RANGE (slot);
 
-CREATE INDEX account_audit_txn_signature ON public.account_audit (txn_signature);
-CREATE INDEX account_audit_slot ON public.account_audit (slot);
+CREATE INDEX account_audit_pubkey_slot_wv ON  public.account_audit (pubkey, slot, write_version);
+CREATE INDEX account_audit_txn_signature_slot ON public.account_audit (txn_signature, slot);
+CREATE INDEX account_audit_write_version ON public.account_audit (write_version);
+
+CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
+    BEGIN
+		INSERT INTO public.account_audit (pubkey, owner, lamports, slot, executable,
+		                           rent_epoch, data, write_version, updated_on, txn_signature)
+            VALUES (NEW.pubkey, NEW.owner, NEW.lamports, NEW.slot,
+                    NEW.executable, NEW.rent_epoch, NEW.data,
+                    NULL, NEW.updated_on, NEW.txn_signature);
+        RETURN NEW;
+    END;
+
+$audit_account_update$ LANGUAGE plpgsql;
+
+CREATE TRIGGER account_update_trigger AFTER INSERT OR UPDATE OR DELETE ON public.account
+    FOR EACH ROW EXECUTE PROCEDURE audit_account_update();
