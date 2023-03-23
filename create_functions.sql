@@ -931,7 +931,7 @@ BEGIN
             INNER JOIN parents p ON p.parent = next.slot
             WHERE next.status <> 'rooted'
     )
-    SELECT array_agg(prnts.slot)
+    SELECT array_agg(prnts.slot ORDER BY prnts.slot DESC)
     INTO branch_slots
     FROM parents AS prnts;
 
