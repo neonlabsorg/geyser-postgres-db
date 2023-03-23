@@ -546,7 +546,7 @@ $maintenance_proc$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
-        LOCK TABLE public.account IN ACCESS EXCLUSIVE MODE;
+        LOCK TABLE public.account_audit IN ACCESS EXCLUSIVE MODE;
 
         UPDATE public.account_audit AS acc
         SET write_version = txn.write_version
