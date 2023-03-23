@@ -557,7 +557,7 @@ CREATE OR REPLACE PROCEDURE order_accounts() AS $order_accounts$
             AND acc.slot = txn.slot;
 
         UPDATE public.account_audit AS acc
-        SET write_version = 0
+        SET write_version = -1
         WHERE
             acc.write_version IS NULL
             AND acc.txn_signature IS NULL;
