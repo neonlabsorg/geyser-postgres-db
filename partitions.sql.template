@@ -23,26 +23,6 @@ SET
     jobmon = FALSE                                  -- pg_jobmon isnot used (RDS supports pg_cron instead)
 WHERE parent_table = 'public.account_audit';
 
--- Setup account partitions
--- Single partition should contain ${TEMP_ACCOUNT_PART_SLOT_COUNT} slots
-SELECT partman.create_parent(
-    'public.account',               --p_parent_table
-    'slot',                         --p_control
-    'native',                       --p_type
-    '${TEMP_ACCOUNT_PART_SLOT_COUNT}',  --p_interval
-    NULL,                           --p_constraint_cols
-    10,                             --p_premake
-    'on',                           --p_automatic_maintenance
-    '${HISTORY_START_SLOT}'         --p_start_partition
-);
-
--- Setup account retention
-UPDATE partman.part_config
-SET 
-    retention = '${TEMP_ACCOUNT_RETENTION_SLOTS}',  -- retention period
-    retention_keep_table = FALSE,                   -- remove tables when retention period expired
-    jobmon = FALSE                                  -- pg_jobmon isnot used (RDS supports pg_cron instead)
-WHERE parent_table = 'public.account';
 
 -- Setup transaction partitions
 -- Single partition should contain ${HISTORY_PART_SLOT_COUNT} slots
