@@ -2,7 +2,7 @@
  * This plugin implementation for PostgreSQL requires the following tables
  */
 -- The table storing accounts
-
+CREATE SCHEMA IF NOT EXISTS public;
 
 CREATE TABLE public.account (
     pubkey BYTEA PRIMARY KEY,
