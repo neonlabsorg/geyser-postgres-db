@@ -37,11 +37,6 @@ if [ -z "$MAINTENANCE_SCHEDULE" ]; then
   exit 1
 fi
 
-if [ -z "$TEMP_ACCOUNT_PART_SLOT_COUNT" ]; then
-  echo "TEMP_ACCOUNT_PART_SLOT_COUNT is not defined!"
-  exit 1
-fi
-
 echo "Deploying DB schema..."
 psql \
   --host=$POSTGRES_HOST \
