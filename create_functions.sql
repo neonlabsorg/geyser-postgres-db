@@ -560,7 +560,7 @@ CREATE OR REPLACE PROCEDURE order_accounts() AS $order_accounts$
         SET write_version = 0
         WHERE
             acc.write_version IS NULL
-            AND acc.txn_signature = NULL;
+            AND acc.txn_signature IS NULL;
     END;
 
 $order_accounts$ LANGUAGE plpgsql;
