@@ -240,3 +240,4 @@ CREATE TABLE public.account_audit (
 
 CREATE INDEX account_audit_txn_signature ON public.account_audit (txn_signature);
 CREATE INDEX account_audit_slot ON public.account_audit (slot);
+CREATE INDEX account_audit_write_version ON public.account_audit (write_version);
