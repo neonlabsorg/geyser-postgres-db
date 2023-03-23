@@ -230,13 +230,11 @@ CREATE TABLE public.account_audit (
     data BYTEA,
     write_version BIGINT,
     updated_on TIMESTAMP NOT NULL,
-    txn_signature BYTEA,
-
-    CONSTRAINT account_audit_pk PRIMARY KEY(pubkey, slot, write_version)
+    txn_signature BYTEA
 ) PARTITION BY RANGE (slot);
 
-CREATE INDEX account_audit_txn_signature ON public.account_audit (txn_signature);
-CREATE INDEX account_audit_slot ON public.account_audit (slot);
+CREATE INDEX account_audit_pubkey_slot_wv ON  public.account_audit (pubkey, slot, write_version);
+CREATE INDEX account_audit_txn_signature_slot ON public.account_audit (txn_signature, slot);
 CREATE INDEX account_audit_write_version ON public.account_audit (write_version);
 
 CREATE FUNCTION audit_account_update() RETURNS trigger AS $audit_account_update$
