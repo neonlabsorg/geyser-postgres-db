@@ -998,7 +998,7 @@ BEGIN
 
         SELECT s.parent INTO branch_bottom_parent 
         FROM public.slot AS s
-        WHERE s.slot = branch_slots[array_length(branch_slots, 1) - 1];
+        WHERE s.slot = branch_slots[array_length(branch_slots, 1)];
 
         IF branch_bottom_parent <> first_rooted_slot THEN
             RAISE EXCEPTION 'get_account_at_slot(%, %): 
