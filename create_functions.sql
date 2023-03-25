@@ -945,3 +945,29 @@ BEGIN
         );
 END;
 $get_account_at_slot$ LANGUAGE plpgsql;
+
+-----------------------------------------------------------------------------------------------------------------------
+
+CREATE OR REPLACE PROCEDURE process_account_update(
+    pubkey BYTEA, 
+    slot BIGINT, 
+    owner BYTEA, 
+    lamports BIGINT, 
+    executable BOOL, 
+    rent_epoch BIGINT, 
+    data BYTEA,
+    write_version BIGINT, 
+    updated_on TIMESTAMP, 
+    txn_signature BYTEA
+)  AS $process_account_update$
+BEGIN
+    INSERT INTO account_audit AS acct (
+        pubkey, slot, owner, lamports, executable, rent_epoch, data, 
+        write_version, updated_on, txn_signature
+    )
+    VALUES (
+        pubkey, slot, owner, lamports, executable, rent_epoch, data, 
+        write_version, updated_on, txn_signature
+    );
+END;
+$process_account_update$ LANGUAGE plpgsql;
