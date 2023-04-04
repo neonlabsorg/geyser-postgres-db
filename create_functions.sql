@@ -435,34 +435,21 @@ BEGIN
     -- add recent states of all accounts from account_audit
     -- before slot max_slot into older_account table
     INSERT INTO public.older_account AS older
-    SELECT DISTINCT ON (acc1.pubkey)
-        acc1.pubkey,
-        acc1.owner,
-        acc1.lamports,
-        acc1.slot,
-        acc1.executable,
-        acc1.rent_epoch,
-        acc1.data,
-        acc1.write_version,
-        acc1.updated_on,
-        acc1.txn_signature
-    FROM public.account_audit AS acc1
-    INNER JOIN (
-        SELECT DISTINCT ON (acc2.pubkey)
-            acc2.pubkey AS pubkey,
-            acc2.slot AS slot,
-            acc2.write_version AS write_version
-        FROM public.account_audit AS acc2
-        WHERE 
-            acc2.write_version IS NOT NULL AND acc2.slot >= min_slot AND acc2.slot < max_slot
-        ORDER BY acc2.pubkey, acc2.slot DESC, acc2.write_version DESC
-    ) latest_versions
-    ON
-        latest_versions.pubkey = acc1.pubkey
-        AND latest_versions.slot = acc1.slot
-        AND latest_versions.write_version = acc1.write_version
+    SELECT DISTINCT ON (acc.pubkey)
+        acc.pubkey,
+        acc.owner,
+        acc.lamports,
+        acc.slot,
+        acc.executable,
+        acc.rent_epoch,
+        acc.data,
+        acc.write_version,
+        acc.updated_on,
+        acc.txn_signature
+    FROM public.account_audit AS acc
     WHERE
-        acc1.write_version IS NOT NULL AND acc1.slot >= min_slot AND acc1.slot < max_slot
+        acc.write_version IS NOT NULL AND acc.slot >= min_slot AND acc.slot < max_slot
+    ORDER BY acc.pubkey, acc.slot DESC, acc.write_version DESC
     ON CONFLICT (pubkey) DO UPDATE SET 
 		slot=excluded.slot, 
 		owner=excluded.owner, 
