@@ -905,7 +905,7 @@ DECLARE
 BEGIN
     SELECT * INTO first_rooted_slot FROM get_first_rooted_slot(in_slot);
 
-    IF first_rooted_slot < in_slot THEN
+    IF first_rooted_slot <> in_slot THEN
         -- we are on branch
         SELECT * INTO branch_slots FROM get_branch_slots(in_slot);
 
