@@ -467,6 +467,7 @@ END;
 $update_older_account$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
+-- Returns number of slot where given account was updated not later than max_slot
 CREATE OR REPLACE FUNCTION get_recent_update_slot(
     in_pubkey BYTEA,
     max_slot BIGINT
@@ -479,9 +480,6 @@ RETURNS TABLE (
 AS $get_recent_update_slot$
 
 BEGIN
-    LOCK TABLE public.account_audit IN ACCESS SHARE MODE;
-    LOCK TABLE public.older_account IN ACCESS SHARE MODE;
-
     RETURN QUERY
         WITH results AS (
             SELECT acc.slot, acc.write_version 
@@ -533,8 +531,6 @@ $maintenance_proc$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE PROCEDURE order_accounts() AS $order_accounts$
     BEGIN
-        LOCK TABLE public.account_audit IN ACCESS EXCLUSIVE MODE;
-
         UPDATE public.account_audit AS acc
         SET write_version = txn.write_version
         FROM public.transaction AS txn
@@ -881,6 +877,7 @@ END;
 $get_first_rooted_slot$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
+-- Returns latest version of given account on a moment of given slot
 CREATE OR REPLACE FUNCTION get_account_at_slot(
     in_pubkey BYTEA,
     in_slot BIGINT
@@ -908,7 +905,7 @@ DECLARE
 BEGIN
     SELECT * INTO first_rooted_slot FROM get_first_rooted_slot(in_slot);
 
-    IF first_rooted_slot <> in_slot THEN
+    IF first_rooted_slot > in_slot THEN
         -- we are on branch
         SELECT * INTO branch_slots FROM get_branch_slots(in_slot);
 
