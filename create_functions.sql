@@ -703,8 +703,8 @@ BEGIN
             acc.txn_signature
         FROM public.account_audit AS acc
         WHERE
-            acc.write_version IS NOT NULL
-            AND acc.pubkey IN (SELECT * FROM unnest(accounts))
+            acc.write_version IS NOT NULL -- delete is case of clickhouse
+            AND acc.pubkey IN (SELECT * FROM unnest(accounts)) -- replace by acc.pubkey = in_pubkey in case of clickhouse
             AND acc.slot IN (SELECT * FROM unnest(branch_slots)) 
             AND (
                 max_slot IS NULL
@@ -741,6 +741,59 @@ RETURNS TABLE (
 AS $get_accounts_at_slot_impl$
 
 BEGIN
+    -- Neon cli logic:
+    -- 1. Find accounts in branch
+    --    SELECT *
+    --    FROM events.update_account_deistributed AS acc
+    --    WHERE
+    --        acc.pubkey = in_pubkey
+    --        AND acc.slot IN (SELECT * FROM unnest(branch_slots)) <<<< INVESTIGATE FOR CLICKHOUSE
+    --        AND (
+    --            max_slot IS NULL
+    --            OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (
+    --                acc.slot = max_slot AND acc.write_version < max_write_version
+    --                OR acc.slot < max_slot 
+    --            )
+    --        )
+    --    ORDER BY acc.pubkey DESC, acc.slot DESC, acc.write_version DESC
+    --    LIMIT 1;
+    -- 2. Analyze result:
+    --     a) Result exist - return result
+    --     b) result empty - go to point 3
+    -- 3. Find account in history (in scope of retention interval)
+    --   SELECT *
+    --   FROM events.update_account_distributed acc
+    --   INNER JOIN events.update_slot usd 
+    --   ON acc.slot = usd.slot AND usd.status = 'Rooted'
+    --   WHERE
+    --        acc.pubkey = pubkey
+    --        AND acc.slot <= topmost_rooted_slot
+    --        AND (
+    --            -- common case
+    --            max_slot IS NULL
+    --            -- case for get_pre_accounts
+    --            -- used to select version of account preliminary to some particular transaction
+    --            OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (
+    --               acc.slot = max_slot AND acc.write_version < max_write_version
+    --                OR acc.slot < max_slot
+    --            ) 
+    --        )
+    --    ORDER BY 
+    --        acc.pubkey DESC,
+    --        acc.slot DESC,
+    --        acc.write_version DESC
+    --    LIMIT 1;
+    -- 4. Analyze result:
+    --     a) Result exist - return result
+    --     b) result empty - go to point 5
+    -- 5. Find account in older_account
+    -- SELECT *
+    -- FROM events.older_account_distributed oad
+    -- WHERE oad.pubkey = pubkey
+    -- 6. Analyze result:
+    --     a) Result exist - return result
+    --     b) result empty - return empty
+
     RETURN QUERY
         WITH results AS (
             -- Start searching recent states of accounts in this branch
@@ -762,7 +815,7 @@ BEGIN
         )
         SELECT DISTINCT ON (res.pubkey) * 
         FROM results AS res
-        ORDER BY res.pubkey, res.slot DESC, res.write_version DESC;
+        ORDER BY res.pubkey DESC, res.slot DESC, res.write_version DESC;
 END;
 $get_accounts_at_slot_impl$ LANGUAGE plpgsql;
 
@@ -781,6 +834,28 @@ DECLARE
     branch_slots BIGINT[] = NULL;
 
 BEGIN
+    -- Clickhouse logic:
+    -- 1. Find topmost_rooted_slot and all not rooted slots
+    -- SELECT DISTINCT ON (slot) 
+    --     slot, parent FROM events.update_slot_distrubuted
+    -- WHERE 
+    --     slot >= (
+    --         SELECT MAX(slot) 
+    --         FROM events.update_slot_distributed 
+    --         WEHRE status = 'Rooted'
+    --     )
+    -- ORDER BY slot DESC, status DESC
+    -- Neon-CLI logic:
+    -- 2. Find start_slot in found slots
+    --     a) start_slot not found - raise error: "requested slot is not on working branch"
+    --     b) start_slot found -> go to point 3.
+    -- 3. Collect chain of branch slots (by following parents) starting from start_slot.
+    --    Stop iterating if
+    --     a) current parent is not included in result set of query (point 1)
+    --            return error: "requested slot is not on working branch"
+    --     b) current parent is topmost_rooted_slot - return branch slots and topmost_rooted_slot
+
+
     -- Find all slots on the given branch starting from max_slot down to first rooted slot
     WITH RECURSIVE parents AS (
         SELECT
@@ -807,13 +882,11 @@ END;
 $get_branch_slots$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION get_first_rooted_slot(
-    start_slot BIGINT
-)
+CREATE OR REPLACE FUNCTION get_tompost_rooted_slot()
 
 RETURNS BIGINT
 
-AS $get_first_rooted_slot$
+AS $get_tompost_rooted_slot$
 
 DECLARE
     result BIGINT;
@@ -822,13 +895,13 @@ BEGIN
     SELECT sl.slot
     INTO result
     FROM public.slot AS sl
-    WHERE sl.slot <= start_slot AND sl.status = 'rooted'
+    WHERE sl.status = 'rooted'
     ORDER BY sl.slot DESC
     LIMIT 1;
 
     RETURN result;
 END;
-$get_first_rooted_slot$ LANGUAGE plpgsql;
+$get_tompost_rooted_slot$ LANGUAGE plpgsql;
 
 -----------------------------------------------------------------------------------------------------------------------
 -- Returns latest version of given account on a moment of given slot
@@ -853,25 +926,22 @@ AS $get_account_at_slot$
 
 DECLARE
     branch_slots BIGINT[] = NULL;
-    first_rooted_slot BIGINT = NULL;
     branch_bottom_parent BIGINT = NULL;
 
 BEGIN
-    SELECT * INTO first_rooted_slot FROM get_first_rooted_slot(in_slot);
+    SELECT * INTO branch_slots FROM get_branch_slots(in_slot);
 
-    IF first_rooted_slot <> in_slot THEN
-        -- we are on branch
-        SELECT * INTO branch_slots FROM get_branch_slots(in_slot);
-
+    -- block removed in clickhouse
+    IF branch_slots IS NOT NULL THEN
         -- get parent of the bottom slot on a branch
         SELECT s.parent INTO branch_bottom_parent 
         FROM public.slot AS s
         WHERE s.slot = branch_slots[array_length(branch_slots, 1)];
 
         -- parent of the bottom branch slot should be topmost rooted slot in the history
-        IF branch_bottom_parent <> first_rooted_slot THEN
+        IF branch_bottom_parent IS NULL THEN
             RAISE EXCEPTION 'get_account_at_slot(%, %): 
-            slot is not yet belongs to any branch', in_pubkey, in_slot;
+            Branch is not connected to root', in_pubkey, in_slot;
         END IF;
     END IF;
 
@@ -879,7 +949,7 @@ BEGIN
         SELECT * FROM get_accounts_at_slot_impl(
             ARRAY[in_pubkey], 
             branch_slots, 
-            first_rooted_slot,
+            branch_bottom_parent,
             NULL, -- max_slot
             NULL  -- max_write_version
         );
@@ -889,16 +959,16 @@ $get_account_at_slot$ LANGUAGE plpgsql;
 -----------------------------------------------------------------------------------------------------------------------
 
 CREATE OR REPLACE PROCEDURE process_account_update(
-    pubkey BYTEA, 
-    slot BIGINT, 
-    owner BYTEA, 
-    lamports BIGINT, 
-    executable BOOL, 
-    rent_epoch BIGINT, 
-    data BYTEA,
-    write_version BIGINT, 
-    updated_on TIMESTAMP, 
-    txn_signature BYTEA
+    in_pubkey BYTEA, 
+    in_slot BIGINT, 
+    in_owner BYTEA, 
+    in_lamports BIGINT, 
+    in_executable BOOL, 
+    in_rent_epoch BIGINT, 
+    in_data BYTEA,
+    in_write_version BIGINT, 
+    in_updated_on TIMESTAMP, 
+    in_txn_signature BYTEA
 )  AS $process_account_update$
 BEGIN
     INSERT INTO account_audit AS acct (
@@ -906,8 +976,8 @@ BEGIN
         write_version, updated_on, txn_signature
     )
     VALUES (
-        pubkey, slot, owner, lamports, executable, rent_epoch, data, 
-        write_version, updated_on, txn_signature
+        in_pubkey, in_slot, in_owner, in_lamports, in_executable, in_rent_epoch, in_data, 
+        in_write_version, in_updated_on, in_txn_signature
     );
 END;
 $process_account_update$ LANGUAGE plpgsql;
