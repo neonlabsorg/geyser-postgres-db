@@ -748,41 +748,27 @@ BEGIN
     --    WHERE
     --        acc.pubkey = in_pubkey
     --        AND acc.slot IN (SELECT * FROM unnest(branch_slots)) <<<< INVESTIGATE FOR CLICKHOUSE
-    --        AND (
-    --            max_slot IS NULL
-    --            OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (
-    --                acc.slot = max_slot AND acc.write_version < max_write_version
-    --                OR acc.slot < max_slot 
-    --            )
-    --        )
     --    ORDER BY acc.pubkey DESC, acc.slot DESC, acc.write_version DESC
     --    LIMIT 1;
     -- 2. Analyze result:
     --     a) Result exist - return result
     --     b) result empty - go to point 3
     -- 3. Find account in history (in scope of retention interval)
-    --   SELECT *
-    --   FROM events.update_account_distributed acc
-    --   INNER JOIN events.update_slot usd 
-    --   ON acc.slot = usd.slot AND usd.status = 'Rooted'
-    --   WHERE
-    --        acc.pubkey = pubkey
-    --        AND acc.slot <= topmost_rooted_slot
-    --        AND (
-    --            -- common case
-    --            max_slot IS NULL
-    --            -- case for get_pre_accounts
-    --            -- used to select version of account preliminary to some particular transaction
-    --            OR max_slot IS NOT NULL AND max_write_version IS NOT NULL AND (
-    --               acc.slot = max_slot AND acc.write_version < max_write_version
-    --                OR acc.slot < max_slot
-    --            ) 
-    --        )
-    --    ORDER BY 
-    --        acc.pubkey DESC,
-    --        acc.slot DESC,
-    --        acc.write_version DESC
-    --    LIMIT 1;
+    --      SELECT
+    --          uad.pubkey,
+    --          uad.owner,
+    --          uad.lamports,
+    --          uad.executable,
+    --          uad.rent_epoch,
+    --          uad.data,
+    --          uad.slot,
+    --          uad.write_version,
+    --          uad.txn_signature 
+    --      FROM events.update_account_distributed uad 
+    --      INNER JOIN events.update_slot us 
+    --      ON uad.slot = us.slot AND us.status = 'Rooted' 
+    --      WHERE uad.pubkey = pubkey AND uad.slot <= topmost_rooted_slot 
+    --      ORDER BY uad.pubkey DESC, uad.slot DESC, uad.write_version DESC LIMIT 1
     -- 4. Analyze result:
     --     a) Result exist - return result
     --     b) result empty - go to point 5
