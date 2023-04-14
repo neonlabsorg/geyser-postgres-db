@@ -742,6 +742,7 @@ AS $get_accounts_at_slot_impl$
 
 BEGIN
     -- Neon cli logic:
+    -- 0. Find branch_slots and topmost_rooted_slot using get_branch_slots function
     -- 1. Find accounts in branch
     --      SELECT
     --          uad.pubkey,
