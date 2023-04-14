@@ -836,15 +836,16 @@ DECLARE
 BEGIN
     -- Clickhouse logic:
     -- 1. Find topmost_rooted_slot and all not rooted slots
-    -- SELECT DISTINCT ON (slot) 
-    --     slot, parent FROM events.update_slot_distrubuted
-    -- WHERE 
-    --     slot >= (
-    --         SELECT MAX(slot) 
-    --         FROM events.update_slot_distributed 
-    --         WEHRE status = 'Rooted'
-    --     )
-    -- ORDER BY slot DESC, status DESC
+    --      SELECT DISTINCT ON (slot) 
+    --          slot, parent, status 
+    --      FROM events.update_slot 
+    --      WHERE slot >= (
+    --          SELECT slot 
+    --          FROM events.update_slot 
+    --          WHERE status = 'Rooted' 
+    --          ORDER BY slot DESC LIMIT 1
+    --      ) 
+    --      ORDER BY slot, status
     -- Neon-CLI logic:
     -- 2. Find start_slot in found slots
     --     a) start_slot not found - raise error: "requested slot is not on working branch"
