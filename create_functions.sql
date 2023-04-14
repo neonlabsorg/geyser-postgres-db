@@ -844,7 +844,8 @@ BEGIN
     --          FROM events.update_slot 
     --          WHERE status = 'Rooted' 
     --          ORDER BY slot DESC LIMIT 1
-    --      ) 
+    --      )
+    --      AND parent IS NOT NULL
     --      ORDER BY slot DESC, status DESC
     -- Neon-CLI logic:
     -- 2. Find start_slot in found slots
