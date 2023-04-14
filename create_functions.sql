@@ -845,7 +845,7 @@ BEGIN
     --          WHERE status = 'Rooted' 
     --          ORDER BY slot DESC LIMIT 1
     --      ) 
-    --      ORDER BY slot, status
+    --      ORDER BY slot DESC, status DESC
     -- Neon-CLI logic:
     -- 2. Find start_slot in found slots
     --     a) start_slot not found - raise error: "requested slot is not on working branch"
