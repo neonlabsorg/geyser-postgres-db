@@ -743,13 +743,22 @@ AS $get_accounts_at_slot_impl$
 BEGIN
     -- Neon cli logic:
     -- 1. Find accounts in branch
-    --    SELECT *
-    --    FROM events.update_account_deistributed AS acc
-    --    WHERE
-    --        acc.pubkey = in_pubkey
-    --        AND acc.slot IN (SELECT * FROM unnest(branch_slots)) <<<< INVESTIGATE FOR CLICKHOUSE
-    --    ORDER BY acc.pubkey DESC, acc.slot DESC, acc.write_version DESC
-    --    LIMIT 1;
+    --      SELECT
+    --          uad.pubkey,
+    --          uad.owner,
+    --          uad.lamports,
+    --          uad.executable,
+    --          uad.rent_epoch,
+    --          uad.data,
+    --          uad.slot,
+    --          uad.write_version,
+    --          uad.txn_signature
+    --      FROM events.update_account_distributed AS uad
+    --      WHERE
+    --          uad.pubkey = in_pubkey
+    --          AND uad.slot IN (SELECT * FROM unnest(branch_slots)) <<<< INVESTIGATE FOR CLICKHOUSE
+    --      ORDER BY uad.pubkey DESC, uad.slot DESC, uad.write_version DESC
+    --      LIMIT 1;
     -- 2. Analyze result:
     --     a) Result exist - return result
     --     b) result empty - go to point 3
@@ -763,19 +772,29 @@ BEGIN
     --          uad.data,
     --          uad.slot,
     --          uad.write_version,
-    --          uad.txn_signature 
-    --      FROM events.update_account_distributed uad 
-    --      INNER JOIN events.update_slot us 
-    --      ON uad.slot = us.slot AND us.status = 'Rooted' 
-    --      WHERE uad.pubkey = pubkey AND uad.slot <= topmost_rooted_slot 
-    --      ORDER BY uad.pubkey DESC, uad.slot DESC, uad.write_version DESC LIMIT 1
+    --          uad.txn_signature
+    --      FROM events.update_account_distributed uad
+    --      INNER JOIN events.update_slot us
+    --      ON uad.slot = us.slot AND us.status = 'Rooted'
+    --      WHERE uad.pubkey = pubkey AND uad.slot <= topmost_rooted_slot
+    --      ORDER BY uad.pubkey DESC, uad.slot DESC, uad.write_version DESC
+    --      LIMIT 1;
     -- 4. Analyze result:
     --     a) Result exist - return result
     --     b) result empty - go to point 5
     -- 5. Find account in older_account
-    -- SELECT *
-    -- FROM events.older_account_distributed oad
-    -- WHERE oad.pubkey = pubkey
+    --      SELECT
+    --          uad.pubkey,
+    --          uad.owner,
+    --          uad.lamports,
+    --          uad.executable,
+    --          uad.rent_epoch,
+    --          uad.data,
+    --          uad.slot,
+    --          uad.write_version,
+    --          uad.txn_signature
+    --      FROM events.older_account_distributed oad
+    --      WHERE oad.pubkey = pubkey;
     -- 6. Analyze result:
     --     a) Result exist - return result
     --     b) result empty - return empty
